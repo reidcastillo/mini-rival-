@@ -6,7 +6,6 @@ class Statement {
   private values: Value[] = [];
   private sql: string;
   constructor(private client: PoolClient, sql: string) {
-    // Application-owned SQL uses ? placeholders. No user-supplied SQL is accepted.
     let position = 0;
     this.sql = sql.replace(/\?/g, () => `$${++position}`);
   }
@@ -19,7 +18,6 @@ export class Database {
   constructor(private client: PoolClient) {}
   prepare(sql: string) { return new Statement(this.client, sql); }
   async batch(statements: Statement[]) {
-    // All statements already run inside the enclosing request transaction.
     for (const statement of statements) await statement.run();
   }
 }

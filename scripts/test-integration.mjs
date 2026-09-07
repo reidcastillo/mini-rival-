@@ -24,7 +24,7 @@ let failed = false;
 try {
   await database.initialise(); await database.start();
   await run(['scripts/migrate.mjs'],env);
-  await run(['scripts/migrate.mjs'],env); // Check repeat setup is harmless.
+  await run(['scripts/migrate.mjs'],env);
   server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(appPort)],{env,stdio:['ignore','pipe','pipe']});
   server.stdout.on('data',()=>{});
   server.stderr.on('data',chunk=>process.stderr.write(chunk));
@@ -43,6 +43,4 @@ finally {
   await rm(directory,{recursive:true,force:true});
   if(failed) process.exitCode=1;
 }
-
-// The embedded database registers exit hooks; keep test failures nonzero after cleanup.
 process.exit(failed ? 1 : 0);

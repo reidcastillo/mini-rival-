@@ -1,8 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { Pool } from 'pg';
-
-// Keep this standalone script runnable without a TypeScript loader.
 if (!process.env.DATABASE_URL) {
   console.error('Set DATABASE_URL in .env.local before running migrations.');
   process.exit(1);

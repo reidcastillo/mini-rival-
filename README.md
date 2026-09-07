@@ -2,7 +2,7 @@
 
 A Vercel-ready, head-to-head mini crossword game built with **Next.js 16, React 19, and PostgreSQL**. Visitors automatically enter a waiting room, pair with the next player, and race on the same original pop-culture puzzle. Includes a timer, live opponent progress, server-checked wins, and a persistent leaderboard.
 
-The repository contains **100 generated 5×5 puzzles**. No AI API key or external puzzle service is needed.
+The repository contains **100 generated 5×5 puzzles**. No external puzzle service is needed.
 
 ## Push this project to GitHub
 
@@ -97,8 +97,10 @@ A shared 4-second countdown precedes each race. Opponent progress means filled s
 
 Players expire after 45 seconds without a heartbeat. Abandoned or 15-minute matches cancel without awarding a win. Leaderboards rank guest sessions by wins, then best winning time. Closing a tab can lose access to that guest identity. This prototype has no accounts or anti-bot ranking system.
 
-## Migration from the original hosted version
+## Friends and themes
 
-This checkout no longer depends on Cloudflare Workers, D1, Vinext, or Sites. PostgreSQL starts with an empty leaderboard; existing D1 players, matches, and scores are **not** automatically transferred. The old hosted site remains separate until you retire it. No automatic deployment or Git push is performed by the migration scripts.
+Choose Play with a friend to create a private waiting room. Copy the room link and send it to one friend. Public matchmaking cannot enter this room. Both players must choose OK, rematch after each race; a fresh puzzle and shared countdown begin only after both agree. The link stays the same across rounds. Choose Public match after a race to leave the friend room.
 
-The interface, clues, and puzzle library are original. Mini Duel is not affiliated with The New York Times. A feature-detected WebMCP read-status tool remains available in compatible browsers; its registration has not been browser-tested here.
+The Themes menu offers Classic, Dark, Jungle, and Space. Each device saves its own choice locally.
+
+Before deploying this update, run `npm run db:migrate` to add the friend-room columns. Existing matches and rankings are preserved.

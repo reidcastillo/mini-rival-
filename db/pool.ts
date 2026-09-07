@@ -1,6 +1,4 @@
 import { Pool, types } from 'pg';
-
-// All BIGINT values in this app are millisecond timestamps or small counts.
 types.setTypeParser(20, value => {
   const number = Number(value);
   if (!Number.isSafeInteger(number)) throw new Error('Database integer exceeds the safe range');
@@ -17,7 +15,6 @@ export function getPool(): Pool {
       connectionTimeoutMillis: 10000,
       allowExitOnIdle: true,
     });
-    // Never log database error objects: they may contain connection details.
     globalDb.miniDuelPool.on('error', () => console.error('Postgres idle connection failed'));
   }
   return globalDb.miniDuelPool;

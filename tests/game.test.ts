@@ -113,3 +113,62 @@ test('concurrent arrivals form distinct pairs and duplicate joins stay in one ro
   assert.equal(occupancy.size, 4);
   assert.deepEqual([...occupancy.values()], [2,2,2,2]);
 });
+
+test('friend links isolate pairs and rematches require both players every round', { skip: !base }, async () => {
+  assert.ok(/^http:\/\/(localhost|127\.0\.0\.1):/.test(base!));
+  const tokens = Array.from({length: 4}, () => crypto.randomUUID() + crypto.randomUUID());
+  const [a,b,outsider,publicRival] = tokens;
+  async function call(token: string, body: object, status = 200) {
+    const response = await fetch(`${base}/api/game`, {method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+    assert.equal(response.status,status,await response.clone().text());
+    return response.json() as Promise<any>;
+  }
+  const created = await call(a,{action:'friends'});
+  assert.equal(created.room.mode,'friends'); assert.equal(created.room.status,'waiting');
+  assert.match(created.room.invite,/^[a-f0-9]{32}$/);
+  const repeatedCreate = await call(a,{action:'friends'});
+  assert.equal(repeatedCreate.room.id,created.room.id);
+  const stranger = await call(outsider,{action:'join'});
+  assert.notEqual(stranger.room.id,created.room.id); assert.equal(stranger.room.mode,'public');
+  assert.equal(stranger.room.invite,null);
+  const strangerPair = await call(publicRival,{action:'join'});
+  assert.equal(strangerPair.room.id,stranger.room.id);
+  const joined = await call(b,{action:'join',invite:created.room.invite});
+  assert.equal(joined.room.id,created.room.id);
+  await call(outsider,{action:'join',invite:created.room.invite},409);
+  await call(outsider,{action:'join',invite:'bad'},400);
+  const randomGuest = crypto.randomUUID()+crypto.randomUUID();
+  await call(randomGuest,{action:'join',invite:'a'.repeat(32)},404);
+  let current = joined;
+  const puzzleTitles = new Set();
+  for (let round=0;round<3;round++) {
+    await new Promise(resolve=>setTimeout(resolve,Math.max(0,current.room.start-Date.now()+100)));
+    const started = await call(a,{action:'sync'});
+    const index = puzzles.findIndex((_,i)=>JSON.stringify(puzzleDetails(i).public)===JSON.stringify(started.room.puzzle));
+    assert.ok(index>0); assert.ok(!puzzleTitles.has(index)); puzzleTitles.add(index);
+    const correct = puzzleDetails(index).solution.map(x=>x==='#'?'':x);
+    const finished = await call(a,{action:'sync',roomId:current.room.id,answers:correct,revision:1});
+    assert.equal(finished.room.status,'finished');
+    const waiting = await call(a,{action:'replay',roomId:current.room.id});
+    assert.equal(waiting.room.id,current.room.id); assert.equal(waiting.room.ready,true);
+    const other = await call(b,{action:'sync'});
+    assert.equal(other.room.opponentReady,true); assert.equal(other.room.ready,false);
+    const duplicate = await call(a,{action:'replay',roomId:current.room.id});
+    assert.equal(duplicate.room.id,current.room.id);
+    const nexts = await Promise.all([call(b,{action:'replay',roomId:current.room.id}),call(b,{action:'replay',roomId:current.room.id})]);
+    assert.equal(nexts[0].room.id,nexts[1].room.id);
+    assert.notEqual(nexts[0].room.id,current.room.id);
+    const resumed = await call(a,{action:'join',invite:created.room.invite});
+    assert.equal(resumed.room.id,nexts[0].room.id);
+    assert.equal(resumed.room.invite,created.room.invite);
+    assert.equal(resumed.room.puzzle,null); assert.equal(resumed.room.ready,false);
+    assert.ok(resumed.room.answers.every((x:string)=>!x));
+    const stale = await call(a,{action:'replay',roomId:current.room.id});
+    assert.equal(stale.room.id,resumed.room.id); assert.equal(stale.room.ready,false);
+    current=resumed;
+  }
+  await call(a,{action:'public'});
+  const abandoned = await call(b,{action:'sync'});
+  assert.equal(abandoned.room.status,'cancelled');
+  await call(b,{action:'replay',roomId:abandoned.room.id},409);
+});

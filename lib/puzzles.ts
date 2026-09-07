@@ -1,6 +1,4 @@
 import generatedPuzzles from '../data/pop-culture-puzzles.json' with { type: 'json' };
-// Server-only puzzle bank. Only clues and the block pattern are sent to players.
-// Index zero stays immutable for old matches. Generated puzzles are append-only.
 export const puzzles = [
   {
     title: 'At the center',
