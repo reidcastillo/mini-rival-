@@ -1,63 +1,104 @@
 # Mini Duel
 
-A small multiplayer crossword race built with React, Vinext, and Cloudflare D1. Opening the site automatically joins the waiting room. The next visitor is paired with you; both get the same puzzle and server start time. The first complete, correct submission wins.
+A Vercel-ready, head-to-head mini crossword game built with **Next.js 16, React 19, and PostgreSQL**. Visitors automatically enter a waiting room, pair with the next player, and race on the same original pop-culture puzzle. Includes a timer, live opponent progress, server-checked wins, and a persistent leaderboard.
 
-## Open and run in VS Code
+The repository contains **100 generated 5×5 puzzles**. No AI API key or external puzzle service is needed.
 
-Open `/Users/reidcastillo/Mini` as a folder in VS Code. Use **Node.js 24** (`nvm install && nvm use` if you use nvm), then run:
+## Push this project to GitHub
+
+The existing checkout is on `main`, with `origin` pointing to `https://github.com/reidcastillo/mini-rival-.git`. From a terminal:
 
 ```sh
-npm install
-npm run db:local
-npm run dev -- --host 0.0.0.0
+cd /Users/reidcastillo/Mini
+git status
+git add -A
+git commit -m "Make Mini Duel ready for Vercel and Postgres"
+git push -u origin main
 ```
 
-Open the URL printed by the server. Use two separate browser windows with fresh tabs, or two browsers, to try a duel. Each tab creates an anonymous guest session. Reloading that tab reconnects to the same race; copying a tab with the browser's Duplicate command may copy its session, so open the link in a fresh tab instead. To play on two devices locally, both must use the same server on your network; HTTPS hosting is the easiest option because guest session creation uses browser secure-context APIs.
+No `git init` or new remote is needed. Do not force-push if Git reports newer remote commits; pull and reconcile them first. `.env.local` is ignored; `.env.example` contains placeholders only.
 
-## Where to edit
+## Set up Vercel and Neon
 
-- `app/page.tsx`: waiting room, crossword controls, timer, results, opponent grid, leaderboard.
-- `app/globals.css`: typography, colors, responsive layout, grid styling.
-- `lib/puzzles.ts`: original server-only puzzle bank. The original puzzle is retained at index zero for old matches. New races use the generated pop-culture library. Clues are numbered automatically in row order.
-- `app/api/game/route.ts`: guest sessions, pairing, progress, completion validation, and leaderboard queries.
-- `db/schema.ts` and `drizzle/`: persistent data schema and migrations.
-- `.openai/hosting.json`: Sites project and database binding.
+1. Sign in to Vercel with the GitHub account that can access your repository.
+2. Choose **Add New → Project**, then import **mini-rival-**.
+3. Use framework **Next.js**, root directory **./**, Node.js **24.x**, install command **npm ci**, and build command **npm run build**. Leave the output-directory override blank. Most settings are detected automatically; `vercel.json` supplies the build/install commands.
+4. Deploy to create the project. The site can build without a database, but matches cannot start until steps 5–8 are complete.
+5. In the project's **Storage** area or Vercel Marketplace, install **Neon**, create a Postgres database, and connect it to this project. Choose a database region near your Vercel Functions region. Choose the plan appropriate for you.
+6. Under **Settings → Environment Variables**, ensure **DATABASE_URL** contains Neon's **pooled Postgres connection string**, including the SSL query parameters from Neon. It must be available to **Production**. Use a separate database/Neon branch for Preview deployments if you enable them. Never name this variable `NEXT_PUBLIC_DATABASE_URL`.
+7. Initialize the production database once from your local project. Use Node.js 24. Create `.env.local` if needed:
 
-## Controls
+   ```sh
+   cd /Users/reidcastillo/Mini
+   npm ci
+   cp -n .env.example .env.local
+   ```
 
-Click a square and type. Click it again, or press Enter, to switch across/down. Arrow keys move between cells; Tab/Shift+Tab within the grid move through clues. Backspace erases. The on-screen keyboard works on phones.
+   Open `.env.local` in VS Code and replace the placeholder DATABASE_URL with the same Neon connection string. Do not commit this file. Then run:
 
-## Rules and implementation
+   ```sh
+   npm run db:migrate
+   ```
 
-- A 4-second shared countdown starts each match. Clues remain hidden until the server start time.
-- Opponent progress means **filled squares**, not confirmed correct answers. Letters and solutions are never sent to the opponent.
-- Updates are sent as you type and synchronized roughly every 850 ms. The server clock determines race time; network latency can affect close finishes.
-- A conditional database update records exactly one winner. Stale submissions cannot overwrite newer edits or a finished race.
-- Waiting players expire after 45 seconds without a heartbeat. Active matches cancel without awarding a win when an opponent has been gone for 45 seconds, or after 15 minutes.
-- Leaderboards persist in D1 and rank anonymous sessions by wins, then fastest winning time. No account system yet; closing a tab loses that guest's session. New matches select from 100 generated pop-culture grids and avoid the waiting player’s last 20 puzzles.
-- This is a playable prototype, not a cheat-resistant ranked platform. It does not include accounts, skill-based pairing, moderation, or protection against automated solvers.
-- The visual layout is inspired by compact newspaper crosswords. Branding and clues are original; this is not affiliated with The New York Times.
+   It should print **Database ready.** The migration is transactional, tracks checksums, and can be safely run again. Builds intentionally do not migrate a database.
+8. In Vercel's **Deployments** tab, redeploy after the environment variables are set. Environment changes apply to new deployments.
+9. Open the production `vercel.app` link on two devices or in two independently opened browser tabs. Both players should pair, receive the same countdown and puzzle, and see each other's progress. Use the production URL for public play; if Vercel deployment protection requests sign-in, configure the intended public audience in the project's Deployment Protection settings.
+10. A custom domain is optional. To use a registered domain, add it under **Settings → Domains** and follow Vercel's DNS instructions. The older pending Sites domain configuration does not transfer automatically.
 
-## Checks
+Official references: [Next.js on Vercel](https://vercel.com/docs/frameworks/full-stack/nextjs), [Vercel storage integrations](https://vercel.com/docs/marketplace-storage), [environment variables](https://vercel.com/docs/environment-variables/managing-environment-variables).
+
+## Run locally
+
+Install Node.js 24 (`nvm install && nvm use` if you use nvm). Set a local or Neon development database URL in `.env.local`, then:
+
+```sh
+npm ci
+npm run db:migrate
+npm run dev
+```
+
+Open `http://localhost:3000`. A regular local PostgreSQL URL also works, for example `postgresql://USER:PASSWORD@localhost:5432/mini_duel`. Use the connection string and TLS settings supplied by your provider for hosted databases; certificate verification is not disabled in application code.
+
+## Verify
 
 ```sh
 npm run typecheck
 npm test
 npm run build
+npm run test:integration
 ```
 
-The integration test requires a **fresh, isolated local database**, because it asserts an empty leaderboard and queue. After a build, start a separate server with `npx wrangler dev --config dist/server/wrangler.json --port 3001 --persist-to .wrangler/test-state`, apply the schema to that same test state using `npx wrangler d1 migrations apply DB --local --config wrangler.local.jsonc --persist-to .wrangler/test-state`, then run `MINI_TEST_URL=http://localhost:3001 npm test`. Use a fresh test-state directory for subsequent runs. Tests cover matchmaking, countdown, private progress, invalid grids, stale revisions, concurrent finishes, replay, and origin validation.
+`npm test` checks all 100 grids. `npm run test:integration` also builds the app, starts a temporary real PostgreSQL database and production Next.js server on unused local ports, applies migrations twice to check idempotency, and tests real API races. It uses random local credentials, never your DATABASE_URL, and removes the temporary database afterward. Embedded Postgres requires its npm install scripts and a supported OS. It is a development test dependency, not the hosted database. Do not run the integration runner as root.
 
-## Hosting
+## Where to edit
 
-The project is configured for Sites with the logical D1 binding `DB`. Generate a new migration with `npm run db:generate` after changing the schema. Build before publishing; Sites applies the saved migrations to the hosted database. Local data and hosted data are separate. The public game must run with its backend; a static file host alone will not support multiplayer.
+- `app/page.tsx`: waiting room, board, input, timer, progress, results, leaderboard.
+- `app/globals.css`: styling and responsive layout.
+- `app/api/game/route.ts`: player sessions, matchmaking, submissions, results.
+- `db/database.ts` and `db/pool.ts`: Postgres transactions and server-only pool.
+- `db/migrations/`: versioned SQL migrations. Never edit an already-applied migration; add a new file.
+- `data/pop-culture-words.json`: original word-and-clue library.
+- `data/pop-culture-puzzles.json`: generated puzzles, served only through the backend.
+- `scripts/generate-pop-puzzles.mjs`: constraint-based crossword generator.
 
-WebMCP: a feature-detected `read_duel_status` tool exposes race status and filled-square counts where supported. Its browser registration was not tested in this environment.
+## Generate more pop-culture puzzles
 
-## Original pop-culture generator
+```sh
+npm run puzzles:generate -- 150
+```
 
-No API keys, external generator, or runtime AI calls are required. `data/pop-culture-words.json` holds original clues for movies, music, TV, gaming, internet culture, and supporting fill. `scripts/generate-pop-puzzles.mjs` uses constraint-based backtracking to build checked 5×5 grids with 17 playable squares and two five-letter entries. All ten entries must be distinct and present in the curated library.
+This grows the library to the requested total, up to 500. Existing order is preserved because saved matches reference puzzle indices. The first legacy puzzle stays at index zero; new races choose generated puzzles and avoid the waiting player's last 20 grids. Extend the curated dictionary for more variety. Each generated puzzle has 17 playable squares, two five-letter entries, and no repeated word within the grid. Individual words and clues can recur across different grids. All words cross correctly and every white square belongs to an across and a down entry. Commit the generated JSON and redeploy to make additions available.
 
-Run `npm run puzzles:generate -- 100` to fill the library to 100 puzzles, or supply a larger total up to 500. Existing puzzles and their order are preserved because saved matches reference these indices. Add word/clue entries to expand the generator's vocabulary. Generated output is saved to `data/pop-culture-puzzles.json` on the server side; it is not shipped in the browser bundle. New output needs a build and deployment before appearing on the public site.
+## Game behavior
 
-This is a curated finite generator, not an unlimited AI system: words and individual clues will recur across different grids. Structural checks validate every grid; clue quality is authored, not inferred by the algorithm.
+Click a square and type; click it again or press Enter to switch direction. Arrow keys move; Tab/Shift+Tab inside the grid select clues; Backspace erases. The on-screen keyboard supports phones. Each fresh tab receives an anonymous guest session, and reloading that tab resumes it. Browser “Duplicate tab” can copy session storage; open a fresh tab via the URL for a separate player.
+
+A shared 4-second countdown precedes each race. Opponent progress means filled squares, not confirmed correct letters. Solutions stay server-side. Changes synchronize roughly every 850 ms. Postgres advisory locks serialize matchmaking, and a conditional row update records exactly one winner when finishes compete. Network latency can affect close races.
+
+Players expire after 45 seconds without a heartbeat. Abandoned or 15-minute matches cancel without awarding a win. Leaderboards rank guest sessions by wins, then best winning time. Closing a tab can lose access to that guest identity. This prototype has no accounts or anti-bot ranking system.
+
+## Migration from the original hosted version
+
+This checkout no longer depends on Cloudflare Workers, D1, Vinext, or Sites. PostgreSQL starts with an empty leaderboard; existing D1 players, matches, and scores are **not** automatically transferred. The old hosted site remains separate until you retire it. No automatic deployment or Git push is performed by the migration scripts.
+
+The interface, clues, and puzzle library are original. Mini Duel is not affiliated with The New York Times. A feature-detected WebMCP read-status tool remains available in compatible browsers; its registration has not been browser-tested here.

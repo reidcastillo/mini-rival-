@@ -1,12 +1,16 @@
-import { database } from '@/db/raw';
+import { withDatabase, type Database } from '@/db/database';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 import { puzzleDetails, puzzles } from '@/lib/puzzles';
 
 type Player = { id: string; name: string; room: string | null; seen: number };
 type Room = { id: string; p1: string; p2: string | null; status: string; puzzle: number; created: number; start: number | null; ended: number | null; winner: string | null; a1: string; a2: string; rev1: number; rev2: number };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
-const first = <T,>(db: D1Database, sql: string, ...args: (string | number | null)[]) => db.prepare(sql).bind(...args).first<T>();
+const first = <T,>(db: Database, sql: string, ...args: (string | number | null)[]) => db.prepare(sql).bind(...args).first<T>();
 
-async function join(db: D1Database, id: string, now: number) {
+async function join(db: Database, id: string, now: number) {
   const room = crypto.randomUUID();
   const recent = await db.prepare("SELECT puzzle FROM rooms WHERE p1=? OR p2=? ORDER BY created DESC LIMIT 20").bind(id, id).all<{ puzzle: number }>();
   const excluded = new Set(recent.results.map(r => r.puzzle));
@@ -32,11 +36,15 @@ export async function POST(request: Request) {
     const raw = await request.text();
     if (raw.length > 4096) return json({ error: 'Request too large' }, 413);
     const body = JSON.parse(raw);
-    if (!['join', 'sync', 'replay'].includes(body.action)) return json({ error: 'Unknown action' }, 400);
+    if (!body || typeof body !== 'object' || !['join', 'sync', 'replay'].includes(body.action)) return json({ error: 'Unknown action' }, 400);
     const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
     const id = Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
-    const db = database(), now = Date.now();
-    let player = await first<Player>(db, 'SELECT * FROM players WHERE id=?', id);
+    return await withDatabase(async db => {
+    // Postgres does not serialize separate statements like D1 batches do.
+    // Lock only matchmaking requests across instances; active races run in parallel.
+    if (body.action !== 'sync') await db.prepare('SELECT pg_advisory_xact_lock(170421, 2)').run();
+    const now = Date.now();
+    let player = await first<Player>(db, 'SELECT * FROM players WHERE id=? FOR UPDATE', id);
     if (!player) {
       if (body.action !== 'join') return json({ error: 'Join a game first' }, 401);
       const names = ['Quick Fox', 'Sharp Owl', 'Clever Cat', 'Swift Finch', 'Bright Bear', 'Nimble Newt'];
@@ -59,14 +67,14 @@ export async function POST(request: Request) {
     let incorrect = false;
     if (body.answers !== undefined) {
       if (body.roomId !== room.id) return json({ error: 'This submission belongs to a different match' }, 409);
-      if (!Array.isArray(body.answers) || body.answers.length !== 25 || body.answers.some((x: unknown) => typeof x !== 'string' || !/^[A-Z]?$/.test(x)) || !Number.isSafeInteger(body.revision) || body.revision < 1) return json({ error: 'Invalid grid' }, 400);
+      if (!Array.isArray(body.answers) || body.answers.length !== 25 || body.answers.some((x: unknown) => typeof x !== 'string' || !/^[A-Z]?$/.test(x)) || !Number.isSafeInteger(body.revision) || body.revision < 1 || body.revision > 2147483647) return json({ error: 'Invalid grid' }, 400);
       const { solution } = puzzleDetails(room.puzzle);
       const answers = body.answers.map((x: string, i: number) => solution[i] === '#' ? '' : x);
       const correct = solution.every((x, i) => x === '#' || answers[i] === x);
       incorrect = !correct && solution.every((x, i) => x === '#' || answers[i]);
-      // A single conditional UPDATE is the winner's finish line. D1 serializes
+      // A single conditional UPDATE is the winner's finish line. Postgres serializes
       // competing writes; a later request cannot replace the recorded winner.
-      await db.prepare(`UPDATE rooms SET a${seat}=?, rev${seat}=?, status=CASE WHEN ? THEN 'finished' ELSE status END, winner=CASE WHEN ? THEN ? ELSE winner END, ended=CASE WHEN ? THEN ? ELSE ended END WHERE id=? AND status='playing' AND start<=? AND rev${seat}<?`).bind(JSON.stringify(answers), body.revision, correct ? 1 : 0, correct ? 1 : 0, id, correct ? 1 : 0, now, room.id, now, body.revision).run();
+      await db.prepare(`UPDATE rooms SET a${seat}=?, rev${seat}=?, status=CASE WHEN ? = 1 THEN 'finished' ELSE status END, winner=CASE WHEN ? = 1 THEN ? ELSE winner END, ended=CASE WHEN ? = 1 THEN ? ELSE ended END WHERE id=? AND status='playing' AND start<=? AND rev${seat}<?`).bind(JSON.stringify(answers), body.revision, correct ? 1 : 0, correct ? 1 : 0, id, correct ? 1 : 0, now, room.id, now, body.revision).run();
     }
     room = (await first<Room>(db, 'SELECT * FROM rooms WHERE id=?', room.id))!;
     const details = puzzleDetails(room.puzzle);
@@ -74,9 +82,10 @@ export async function POST(request: Request) {
     const otherAnswers: string[] = JSON.parse(seat === 1 ? room.a2 : room.a1);
     const leaderboard = await db.prepare("SELECT p.name, COUNT(*) AS wins, MIN(r.ended-r.start) AS best FROM rooms r JOIN players p ON p.id=r.winner WHERE r.status='finished' GROUP BY p.id ORDER BY wins DESC, best ASC, p.name LIMIT 10").all();
     return json({ now: Date.now(), player: { name: player.name }, room: { id: room.id, status: room.status, start: room.start, ended: room.ended, won: room.winner === id, opponent: opponent ? { name: opponent.name, connected: opponent.seen >= now - 10000 } : null, progress: Array.from({ length: 25 }, (_, i) => !!otherAnswers[i]), answers: ownAnswers.length ? ownAnswers : Array(25).fill(''), revision: seat === 1 ? room.rev1 : room.rev2, puzzle: room.status === 'waiting' || (room.start ?? Infinity) > now ? null : details.public }, incorrect, leaderboard: leaderboard.results });
+    });
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: 'Invalid request' }, 400);
-    console.error('Game request failed', error);
+    console.error('Game request failed');
     return json({ error: 'The arena is temporarily unavailable. Reconnecting…' }, 503);
   }
 }

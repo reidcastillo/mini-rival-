@@ -93,3 +93,23 @@ test('two players race, edits stay private, and exactly one finish wins', { skip
   const crossOrigin = await fetch(`${base}/api/game`, { method: 'POST', headers: { origin: 'https://untrusted.example', authorization: `Bearer ${a}` }, body: JSON.stringify({ action: 'sync' }) });
   assert.equal(crossOrigin.status, 403);
 });
+
+test('concurrent arrivals form distinct pairs and duplicate joins stay in one room', { skip: !base }, async () => {
+  assert.ok(/^http:\/\/(localhost|127\.0\.0\.1):/.test(base!));
+  const tokens = Array.from({ length: 8 }, () => crypto.randomUUID() + crypto.randomUUID());
+  const join = async (token: string) => {
+    const response = await fetch(`${base}/api/game`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ action: 'join' }) });
+    assert.equal(response.status, 200, await response.clone().text());
+    return response.json() as Promise<any>;
+  };
+  const arrivals = await Promise.all(tokens.flatMap(token => [join(token), join(token)]));
+  for (let i = 0; i < tokens.length; i++) assert.equal(arrivals[i * 2].room.id, arrivals[i * 2 + 1].room.id);
+  const settled = await Promise.all(tokens.map(join));
+  const occupancy = new Map<string, number>();
+  for (const result of settled) {
+    assert.equal(result.room.status, 'playing');
+    occupancy.set(result.room.id, (occupancy.get(result.room.id) ?? 0) + 1);
+  }
+  assert.equal(occupancy.size, 4);
+  assert.deepEqual([...occupancy.values()], [2,2,2,2]);
+});
