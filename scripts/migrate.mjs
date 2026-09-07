@@ -1,8 +1,18 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { getPool } from '../db/pool.ts';
+import { Pool } from 'pg';
 
-const pool = getPool();
+// Keep this standalone script runnable without a TypeScript loader.
+if (!process.env.DATABASE_URL) {
+  console.error('Set DATABASE_URL in .env.local before running migrations.');
+  process.exit(1);
+}
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 1,
+  connectionTimeoutMillis: 10000,
+});
+pool.on('error', () => console.error('Database connection failed.'));
 let client;
 try {
   client = await pool.connect();
