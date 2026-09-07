@@ -53,6 +53,10 @@ export default function Home() {
       } else if (shouldSend && state.revision === revision && data.room.revision >= revision) {
         state.dirty = false;
       }
+      if (data.room.puzzle) {
+        const blocks = data.room.puzzle.blocks;
+        setCell(current => blocks[current] ? blocks.findIndex(blocked => !blocked) : current);
+      }
       gameRef.current = data;
       setGame(data);
       setError('');
@@ -157,7 +161,7 @@ export default function Home() {
 
   return <main>
     <header className="masthead"><a className="brand" href="/">Mini Duel<span className="brand-square">M</span></a><span className="edition">THE HEAD-TO-HEAD CROSSWORD</span><span className="live-label"><i/> Live arena</span></header>
-    <section className="title-row"><div><div className="eyebrow">QUICK PUZZLE. REAL COMPETITION.</div><h1>The Mini, with a rival.</h1><p>Same crossword. Same clock. First to finish wins.</p></div><span className="mode-pill">1 VS 1 · CLASSIC</span></section>
+    <section className="title-row"><div><div className="eyebrow">QUICK PUZZLE. REAL COMPETITION.</div><h1>The Mini, with a rival.</h1><p>Movies, music, TV & games. Same puzzle. First to finish wins.</p></div><span className="mode-pill">1 VS 1 · POP CULTURE</span></section>
     {error && <div className="connection-error" role="alert"><WifiOff size={17}/><span>{error}</span></div>}
     <div className="arena"><section className="play-panel" aria-label="Crossword duel">
       <div className="score-strip"><div className="player-label"><b><span className="player-dot"/>You</b><small>{game?.player.name ?? 'Joining the arena…'}</small></div><div className="timer-block"><span className="clock" aria-label="Elapsed time">{time(room?.start ? (room.ended ?? now) - room.start : 0)}</span><small>{finished ? 'FINAL TIME' : playing ? 'RACE CLOCK' : 'READY WHEN YOU ARE'}</small></div><div className="player-label opponent-label"><b>{room?.opponent ? 'Opponent' : 'Opponent'}<span className="player-dot rival"/></b><small>{room?.opponent?.name ?? 'Finding a rival…'}</small></div></div>
@@ -173,7 +177,7 @@ export default function Home() {
           {finished && <Trophy size={27}/>}<div><h2>{cancelled ? 'This duel was interrupted.' : room?.won ? 'You won the duel!' : 'Your rival got there first.'}</h2><p>{cancelled ? 'A player disconnected or the 15-minute limit was reached. No win was awarded.' : room?.won ? `Every letter correct. Solved in ${time((room.ended ?? now) - (room.start ?? now))}.` : `${room?.opponent?.name} solved the crossword in ${time((room?.ended ?? now) - (room?.start ?? now))}.`}</p></div>
           <button className="primary-button" onClick={replay} disabled={busy}><RotateCcw size={15}/>{busy ? 'Joining…' : 'Race again'}</button>
         </div>}
-        {puzzle && <><div className="race-progress"><div><div className="progress-label"><b>Your grid</b><span>{filled}/{puzzle.total}</span></div><Progress value={filled / puzzle.total * 100} aria-label="Your filled squares"/></div><div className="rival-progress"><div className="progress-label"><b>Their grid</b><span>{opponentFilled}/{puzzle.total}</span></div><Progress value={opponentFilled / puzzle.total * 100} aria-label="Opponent filled squares"/></div></div>
+        {puzzle && <><div className="puzzle-edition">{puzzle.title}<span>Original Mini Duel puzzle</span></div><div className="race-progress"><div><div className="progress-label"><b>Your grid</b><span>{filled}/{puzzle.total}</span></div><Progress value={filled / puzzle.total * 100} aria-label="Your filled squares"/></div><div className="rival-progress"><div className="progress-label"><b>Their grid</b><span>{opponentFilled}/{puzzle.total}</span></div><Progress value={opponentFilled / puzzle.total * 100} aria-label="Opponent filled squares"/></div></div>
         <div className="puzzle-area"><div className="grid-column"><div className="active-clue"><b>{clue?.number}{direction === 'across' ? 'A' : 'D'}</b><span>{clue?.text}</span><button aria-label="Switch direction" onClick={() => setDirection(d => d === 'across' ? 'down' : 'across')}>{direction === 'across' ? <ArrowRight size={20}/> : <ArrowDown size={20}/>}</button></div>
           <div ref={board} className="crossword" role="group" aria-label="Crossword grid. Type letters, use arrows to move, Enter to switch direction, and Tab to change clues." tabIndex={0}>
             {puzzle.blocks.map((blocked, i) => blocked ? <div className="square block" key={i}/> : <button key={i} tabIndex={-1} disabled={!playing} aria-label={`Row ${Math.floor(i / 5) + 1}, column ${i % 5 + 1}${puzzle.numbers[i] ? `, clue ${puzzle.numbers[i]}` : ''}, ${answers[i] || 'empty'}`} aria-pressed={cell === i} className={`square ${clue?.cells.includes(i) ? 'word-selected' : ''} ${cell === i ? 'selected' : ''}`} onClick={() => { if (cell === i) setDirection(d => d === 'across' ? 'down' : 'across'); setCell(i); board.current?.focus({preventScroll:true}); }}><small>{puzzle.numbers[i]}</small><span>{answers[i]}</span></button>)}

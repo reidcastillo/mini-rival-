@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:local": "wrangler d1 migrations apply DB --local --config wrangler.local.jsonc",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "puzzles:generate": "node scripts/generate-pop-puzzles.mjs"
   },
   "dependencies": {
     "react": "19.2.6",

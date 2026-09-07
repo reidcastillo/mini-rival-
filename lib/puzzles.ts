@@ -1,5 +1,6 @@
+import generatedPuzzles from '../data/pop-culture-puzzles.json' with { type: 'json' };
 // Server-only puzzle bank. Only clues and the block pattern are sent to players.
-// Rows are a valid interlocking word square; across and down use distinct clues.
+// Index zero stays immutable for old matches. Generated puzzles are append-only.
 export const puzzles = [
   {
     title: 'At the center',
@@ -7,11 +8,12 @@ export const puzzles = [
     across: ['It beats inside your chest', 'A glowing bit left in a campfire', 'Mistreat or misuse', 'Sticky substance from a pine tree', 'A style that catches on'],
     down: ['The suit between diamonds and spades, alphabetically (singular)', 'A coal that is still glowing', 'Use in a harmful way', 'Material that traps insects in amber', 'Go viral, on social media'],
   },
-
+  ...generatedPuzzles,
 ];
 export type Clue = { number: number; text: string; cells: number[] };
 export function puzzleDetails(index: number) {
-  const puzzle = puzzles[index % puzzles.length];
+  if (!Number.isInteger(index) || index < 0 || index >= puzzles.length) throw new Error('Unknown puzzle');
+  const puzzle = puzzles[index];
   const solution = puzzle.rows.join('').split('');
   const numbers: Record<number, number> = {};
   const across: Clue[] = [], down: Clue[] = [];

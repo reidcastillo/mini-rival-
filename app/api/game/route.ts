@@ -8,7 +8,11 @@ const first = <T,>(db: D1Database, sql: string, ...args: (string | number | null
 
 async function join(db: D1Database, id: string, now: number) {
   const room = crypto.randomUUID();
-  const puzzle = crypto.getRandomValues(new Uint32Array(1))[0] % puzzles.length;
+  const recent = await db.prepare("SELECT puzzle FROM rooms WHERE p1=? OR p2=? ORDER BY created DESC LIMIT 20").bind(id, id).all<{ puzzle: number }>();
+  const excluded = new Set(recent.results.map(r => r.puzzle));
+  const available = puzzles.map((_, i) => i).filter(i => i > 0 && !excluded.has(i));
+  const choices = available.length ? available : puzzles.map((_, i) => i).filter(i => i > 0);
+  const puzzle = choices[crypto.getRandomValues(new Uint32Array(1))[0] % choices.length];
   await db.batch([
     db.prepare("UPDATE rooms SET status='cancelled', ended=? WHERE status='waiting' AND p1 IN (SELECT id FROM players WHERE seen < ?)").bind(now, now - 45000),
     db.prepare("UPDATE players SET room=NULL WHERE id=? AND room IN (SELECT id FROM rooms WHERE status='cancelled')").bind(id),
