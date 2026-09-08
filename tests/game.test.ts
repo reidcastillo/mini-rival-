@@ -81,7 +81,7 @@ test('two players race, edits stay private, and exactly one finish wins', { skip
   const [endA, endB] = await Promise.all([call(a, { action: 'sync' }), call(b, { action: 'sync' })]);
   assert.equal(endA.room.status, 'finished'); assert.equal(endB.room.status, 'finished');
   assert.notEqual(endA.room.won, endB.room.won); assert.equal(endA.room.ended, endB.room.ended);
-  assert.equal(endA.leaderboard.reduce((sum: number, p: any) => sum + p.wins, 0), 1);
+  assert.deepEqual(endA.leaderboard, []);
   const replay = await call(a, { action: 'replay' });
   assert.notEqual(replay.room.id, match.room.id); assert.equal(replay.room.status, 'waiting');
   const replayB = await call(b, { action: 'replay' }); assert.equal(replayB.room.id, replay.room.id);
@@ -149,6 +149,7 @@ test('friend links isolate pairs and rematches require both players every round'
     const correct = puzzleDetails(index).solution.map(x=>x==='#'?'':x);
     const finished = await call(a,{action:'sync',roomId:current.room.id,answers:correct,revision:1});
     assert.equal(finished.room.status,'finished');
+    assert.equal(finished.leaderboard.reduce((sum:number,p:any)=>sum+p.wins,0),round+1);
     const waiting = await call(a,{action:'replay',roomId:current.room.id});
     assert.equal(waiting.room.id,current.room.id); assert.equal(waiting.room.ready,true);
     const other = await call(b,{action:'sync'});
@@ -171,4 +172,48 @@ test('friend links isolate pairs and rematches require both players every round'
   const abandoned = await call(b,{action:'sync'});
   assert.equal(abandoned.room.status,'cancelled');
   await call(b,{action:'replay',roomId:abandoned.room.id},409);
+});
+
+test('robot progresses on server time, finishes in 30–45 seconds, and can be beaten', {skip:!base}, async () => {
+  assert.ok(/^http:\/\/(localhost|127\.0\.0\.1):/.test(base!));
+  const url = new URL(process.env.DATABASE_URL!);
+  assert.ok(['localhost','127.0.0.1'].includes(url.hostname));
+  const {Pool} = await import('pg');
+  const db = new Pool({connectionString:url.toString(),max:1});
+  const token = crypto.randomUUID()+crypto.randomUUID();
+  async function call(body: object) {
+    const response = await fetch(`${base}/api/game`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+    assert.equal(response.status,200,await response.clone().text());
+    return response.json() as Promise<any>;
+  }
+  try {
+    const created = await call({action:'robot'});
+    assert.equal(created.room.mode,'robot');assert.equal(created.room.opponent.name,'Robot');
+    assert.match(created.player.name,/^[A-Za-z ]+$/);
+    assert.equal(created.room.puzzle,null);assert.deepEqual(created.leaderboard,[]);
+    const initial = (await db.query('SELECT * FROM rooms WHERE id=$1',[created.room.id])).rows[0];
+    assert.ok(initial.robot_ms>=30000 && initial.robot_ms<=45000);
+    await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-Math.floor(initial.robot_ms/2),created.room.id]);
+    const half = await call({action:'sync'});
+    assert.equal(half.room.status,'playing');
+    assert.ok(half.room.progress.filter(Boolean).length>0);
+    assert.ok(half.room.progress.filter(Boolean).length<half.room.puzzle.total);
+    assert.ok(half.room.answers.every((x:string)=>!x));
+    await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-initial.robot_ms-100,created.room.id]);
+    const ended = await call({action:'sync'});
+    assert.equal(ended.room.status,'finished');assert.equal(ended.room.won,false);
+    assert.equal(ended.room.ended-ended.room.start,initial.robot_ms);
+    assert.equal(ended.room.progress.filter(Boolean).length,ended.room.puzzle.total);
+    const next = await call({action:'replay',roomId:ended.room.id});
+    assert.equal(next.room.mode,'robot');assert.notEqual(next.room.id,ended.room.id);
+    await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-1000,next.room.id]);
+    const started = await call({action:'sync'});
+    const index = puzzles.findIndex((_,i)=>JSON.stringify(puzzleDetails(i).public)===JSON.stringify(started.room.puzzle));
+    const correct = puzzleDetails(index).solution.map(x=>x==='#'?'':x);
+    const won = await call({action:'sync',roomId:next.room.id,answers:correct,revision:1});
+    assert.equal(won.room.won,true);assert.equal(won.room.status,'finished');
+    await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-50000,next.room.id]);
+    const stable = await call({action:'sync'});
+    assert.equal(stable.room.won,true);
+  } finally {await db.end();}
 });

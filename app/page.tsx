@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowRight, ArrowDown, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check } from 'lucide-react';
+import { ArrowRight, ArrowDown, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot } from 'lucide-react';
 
 type Clue = { number: number; text: string; cells: number[] };
 type Puzzle = { title: string; blocks: boolean[]; numbers: Record<number, number>; across: Clue[]; down: Clue[]; total: number };
-type Game = { now: number; player: { name: string }; room: { id: string; mode: 'public' | 'friends'; invite: string | null; ready: boolean; opponentReady: boolean; status: string; start: number | null; ended: number | null; won: boolean; opponent: { name: string; connected: boolean } | null; progress: boolean[]; answers: string[]; revision: number; puzzle: Puzzle | null }; incorrect: boolean; leaderboard: { name: string; wins: number; best: number }[] };
+type Game = { now: number; player: { name: string }; room: { id: string; mode: 'public' | 'friends' | 'robot'; invite: string | null; ready: boolean; opponentReady: boolean; status: string; start: number | null; ended: number | null; won: boolean; opponent: { name: string; connected: boolean } | null; progress: boolean[]; answers: string[]; revision: number; puzzle: Puzzle | null }; incorrect: boolean; leaderboard: { name: string; wins: number; best: number | null }[] };
 const time = (ms: number) => `${Math.floor(Math.max(0, ms) / 60000)}:${String(Math.floor(Math.max(0, ms) / 1000) % 60).padStart(2, '0')}`;
 type Theme = 'classic' | 'dark' | 'jungle' | 'space';
 const themes = [{id:'classic', name:'Classic', icon:Sun}, {id:'dark', name:'Dark', icon:Moon}, {id:'jungle', name:'Jungle', icon:Trees}, {id:'space', name:'Space', icon:Rocket}] as const;
@@ -28,7 +28,7 @@ export default function Home() {
   const gameRef = useRef<Game | null>(null);
   const board = useRef<HTMLDivElement>(null);
 
-  const sync = useCallback(async (action: 'join' | 'sync' | 'replay' | 'friends' | 'public' = 'sync') => {
+  const sync = useCallback(async (action: 'join' | 'sync' | 'replay' | 'friends' | 'public' | 'robot' = 'sync') => {
     const state = live.current;
     if (action !== 'sync') while (state.pending) await new Promise(resolve => setTimeout(resolve, 50));
     if (state.pending || !state.token) return;
@@ -167,7 +167,7 @@ export default function Home() {
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem('mini-duel-theme', next); } catch {}
   }
-  async function enter(action: 'replay' | 'friends' | 'public') {
+  async function enter(action: 'replay' | 'friends' | 'public' | 'robot') {
     setBusy(true); await sync(action); setBusy(false);
   }
   async function copyLink() {
@@ -184,7 +184,7 @@ export default function Home() {
     </div>
     <header className="masthead"><a className="brand" href="/">Mini Duel<span className="brand-square">M</span></a><span className="edition">THE HEAD-TO-HEAD CROSSWORD</span><details className="theme-picker"><summary><Palette size={17}/> Themes</summary><div className="theme-options" role="group" aria-label="Site theme">{themes.map(t => <button key={t.id} aria-pressed={theme === t.id} onClick={event => { changeTheme(t.id); event.currentTarget.closest('details')?.removeAttribute('open'); }}><t.icon size={18}/>{t.name}{theme === t.id && <Check size={15}/>}</button>)}</div></details></header>
     <section className="title-row"><div><div className="eyebrow">QUICK PUZZLE. REAL COMPETITION.</div><h1>The Mini, with a rival.</h1></div><span className="mode-pill">1 VS 1 · CLASSIC</span></section>
-    <nav className="mode-switch" aria-label="Match mode"><button aria-pressed={room?.mode !== 'friends'} disabled={busy || playing || countdown} onClick={() => void enter('public')}><Globe size={16}/> Public match</button><button aria-pressed={room?.mode === 'friends'} disabled={busy || playing || countdown} onClick={() => void enter('friends')}><Users size={16}/> Play with a friend</button><span>{room?.mode === 'friends' ? 'Private room · just the two of you' : 'Match with the next player online'}</span></nav>
+    <nav className="mode-switch" aria-label="Match mode"><button aria-pressed={!room || room.mode === 'public'} disabled={busy || playing || countdown} onClick={() => void enter('public')}><Globe size={16}/> Public match</button><button aria-pressed={room?.mode === 'friends'} disabled={busy || playing || countdown} onClick={() => void enter('friends')}><Users size={16}/> Play with a friend</button><button aria-pressed={room?.mode === 'robot'} disabled={busy || playing || countdown} onClick={() => void enter('robot')}><Bot size={16}/> Robot</button><span>{room?.mode === 'friends' ? 'Private room · just the two of you' : room?.mode === 'robot' ? 'Beat the robot · solves in 30–45 seconds' : 'Match with the next player online'}</span></nav>
     {error && <div className="connection-error" role="alert"><WifiOff size={17}/><span>{error}</span></div>}
     <div className="arena"><section className="play-panel" aria-label="Crossword duel">
       <div className="score-strip"><div className="player-label"><b><span className="player-dot"/>You</b><small>{game?.player.name ?? 'Joining the arena…'}</small></div><div className="timer-block"><span className="clock" aria-label="Elapsed time">{time(room?.start ? (room.ended ?? now) - room.start : 0)}</span><small>{finished ? 'FINAL TIME' : playing ? 'RACE CLOCK' : 'READY WHEN YOU ARE'}</small></div><div className="player-label opponent-label"><b>{room?.opponent ? 'Opponent' : 'Opponent'}<span className="player-dot rival"/></b><small>{room?.opponent?.name ?? 'Finding a rival…'}</small></div></div>
@@ -213,8 +213,7 @@ export default function Home() {
       <div className="play-footer"><span>5 × 5 crossword</span><span>{playing && room?.opponent && !room.opponent.connected ? 'Opponent reconnecting…' : 'No hints. Just you and the clock.'}</span></div>
     </section><aside className="sidebar">
       {puzzle && room?.opponent ? <section className="side-section opponent-section"><div className="eyebrow">ACROSS THE TABLE</div><h2>{room.opponent.name}</h2><div className="opponent-grid" aria-label={`${opponentFilled} of ${puzzle.total} opponent squares filled`}>{puzzle.blocks.map((block,i)=><span key={i} className={block?'block':room.progress[i]?'filled':''}/>)}</div><p className="muted">{opponentFilled} of {puzzle.total} squares filled.<br/>Their letters stay secret.</p></section> : <section className="side-section"><div className="eyebrow">HOW TO DUEL</div><h2>A little puzzle.<br/>A proper showdown.</h2><ol className="rules"><li><b>Meet your match</b><p>{room?.mode === 'friends' ? 'Share your private link with a friend.' : 'We pair you with the next player.'}</p></li><li><b>Race the same grid</b><p>Watch their progress as you solve.</p></li><li><b>Finish first</b><p>Every letter must be right to win.</p></li></ol></section>}
-      <section className="side-section leaderboard"><div className="eyebrow">THE LEADERBOARD</div><h2>Fast minds. Bragging rights.</h2>{game?.leaderboard.length ? <Table><TableHeader><TableRow><TableHead>Player</TableHead><TableHead>Wins</TableHead><TableHead>Best</TableHead></TableRow></TableHeader><TableBody>{game.leaderboard.map((p,i)=><TableRow key={p.name}><TableCell><span className="rank">{i+1}</span>{p.name}</TableCell><TableCell>{p.wins}</TableCell><TableCell>{time(p.best)}</TableCell></TableRow>)}</TableBody></Table> : <p className="muted">{game ? 'The first duel starts the rankings. It could be yours.' : 'Rankings load when you connect.'}</p>}<p className="leaderboard-note">Ranked by wins, then fastest solve.</p></section>
+      {room?.mode === 'friends' && <section className="side-section leaderboard"><div className="eyebrow">THE LEADERBOARD</div><h2>Fast minds. Bragging rights.</h2>{game?.leaderboard.length ? <Table><TableHeader><TableRow><TableHead>Player</TableHead><TableHead>Wins</TableHead><TableHead>Best</TableHead></TableRow></TableHeader><TableBody>{game.leaderboard.map((p,i)=><TableRow key={i}><TableCell><span className="rank">{i+1}</span>{p.name}</TableCell><TableCell>{p.wins}</TableCell><TableCell>{p.best === null ? '—' : time(p.best)}</TableCell></TableRow>)}</TableBody></Table> : <p className="muted">{game ? 'The first duel starts the rankings. It could be yours.' : 'Rankings load when you connect.'}</p>}<p className="leaderboard-note">Ranked by wins in this friend room, then fastest solve.</p></section>}
     </aside></div>
-    <footer className="site-footer"><b>Mini Duel</b></footer>
   </main>;
 }

@@ -6,7 +6,7 @@ export const maxDuration = 30;
 import { puzzleDetails, puzzles } from '@/lib/puzzles';
 
 type Player = { id: string; name: string; room: string | null; seen: number };
-type Room = { id: string; p1: string; p2: string | null; status: string; puzzle: number; created: number; start: number | null; ended: number | null; winner: string | null; a1: string; a2: string; rev1: number; rev2: number; friend_code: string | null; ready1: boolean; ready2: boolean; next_room: string | null };
+type Room = { id: string; p1: string; p2: string | null; status: string; puzzle: number; created: number; start: number | null; ended: number | null; winner: string | null; a1: string; a2: string; rev1: number; rev2: number; friend_code: string | null; ready1: boolean; ready2: boolean; next_room: string | null; robot_ms: number | null };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 const first = <T,>(db: Database, sql: string, ...args: (string | number | null)[]) => db.prepare(sql).bind(...args).first<T>();
 
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     const raw = await request.text();
     if (raw.length > 4096) return json({ error: 'Request too large' }, 413);
     const body = JSON.parse(raw);
-    if (!body || typeof body !== 'object' || !['join', 'sync', 'replay', 'friends', 'public'].includes(body.action)) return json({ error: 'Unknown action' }, 400);
+    if (!body || typeof body !== 'object' || !['join', 'sync', 'replay', 'friends', 'public', 'robot'].includes(body.action)) return json({ error: 'Unknown action' }, 400);
     if (body.invite !== undefined && (typeof body.invite !== 'string' || !/^[a-f0-9]{32}$/.test(body.invite))) return json({ error: 'This friend link is invalid.' }, 400);
     const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
     const id = Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
@@ -65,14 +65,23 @@ export async function POST(request: Request) {
     const now = Date.now();
     let player = await first<Player>(db, 'SELECT * FROM players WHERE id=? FOR UPDATE', id);
     if (!player) {
-      if (!['join', 'friends', 'public'].includes(body.action)) return json({ error: 'Join a game first' }, 401);
+      if (!['join', 'friends', 'public', 'robot'].includes(body.action)) return json({ error: 'Join a game first' }, 401);
       const names = ['Quick Fox', 'Sharp Owl', 'Clever Cat', 'Swift Finch', 'Bright Bear', 'Nimble Newt'];
-      const name = `${names[parseInt(id.slice(0, 2), 16) % names.length]} ${id.slice(2, 6).toUpperCase()}`;
+      const name = names[parseInt(id.slice(0, 2), 16) % names.length];
       await db.prepare('INSERT INTO players(id,name,seen) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING').bind(id, name, now).run();
     }
     await db.prepare('UPDATE players SET seen=? WHERE id=?').bind(now, id).run();
     let room = await followRoom(db, id);
-    if (body.action === 'friends') {
+    if (body.action === 'robot' || (body.action === 'replay' && room?.robot_ms)) {
+      if (!room || room.status !== 'playing') {
+        await leave(db, id, room, now);
+        const next = crypto.randomUUID();
+        const duration = 30000 + crypto.getRandomValues(new Uint32Array(1))[0] % 15001;
+        await db.prepare("INSERT INTO players(id,name,seen) VALUES('mini-duel-robot','Robot',?) ON CONFLICT(id) DO NOTHING").bind(now).run();
+        await db.prepare("INSERT INTO rooms(id,p1,p2,status,puzzle,created,start,robot_ms) VALUES(?,?,'mini-duel-robot','playing',?,?,?,?)").bind(next,id,await choosePuzzle(db,id),now,now+4000,duration).run();
+        await db.prepare('UPDATE players SET room=? WHERE id=?').bind(next,id).run();
+      }
+    } else if (body.action === 'friends') {
       if (!room?.friend_code || room.status !== 'waiting') {
         if (room?.status === 'playing') return json({ error: 'Finish this race before creating a friend room.' }, 409);
         await leave(db, id, room, now);
@@ -122,8 +131,18 @@ export async function POST(request: Request) {
     if (!seat) return json({ error: 'Not your match' }, 403);
     const otherId = seat === 1 ? room.p2 : room.p1;
     const opponent = otherId ? await first<Player>(db, 'SELECT * FROM players WHERE id=?', otherId) : null;
-    if (room.status === 'playing' && ((opponent && opponent.seen < now - 45000 && (room.start ?? now) < now - 45000) || (room.start ?? now) < now - 900000)) {
+    if (!room.robot_ms && room.status === 'playing' && ((opponent && opponent.seen < now - 45000 && (room.start ?? now) < now - 45000) || (room.start ?? now) < now - 900000)) {
       await db.prepare("UPDATE rooms SET status='cancelled', ended=? WHERE id=? AND status='playing'").bind(now, room.id).run();
+    }
+    if (room.robot_ms && room.status === 'playing' && room.start !== null) {
+      const {solution} = puzzleDetails(room.puzzle);
+      const duration = room.robot_ms;
+      const elapsed = Math.max(0, now - room.start);
+      const total = solution.filter(x => x !== '#').length;
+      let remaining = Math.min(total, Math.floor(elapsed / duration * total));
+      const robotAnswers = solution.map(x => x === '#' ? '' : remaining-- > 0 ? x : '');
+      const done = elapsed >= duration;
+      await db.prepare("UPDATE rooms SET a2=?, status=CASE WHEN ?=1 THEN 'finished' ELSE status END, winner=CASE WHEN ?=1 THEN p2 ELSE winner END, ended=CASE WHEN ?=1 THEN ? ELSE ended END WHERE id=? AND status='playing'").bind(JSON.stringify(robotAnswers),done?1:0,done?1:0,done?1:0,room.start+duration,room.id).run();
     }
     let incorrect = false;
     if (body.answers !== undefined) {
@@ -139,8 +158,8 @@ export async function POST(request: Request) {
     const details = puzzleDetails(room.puzzle);
     const ownAnswers = JSON.parse(seat === 1 ? room.a1 : room.a2);
     const otherAnswers: string[] = JSON.parse(seat === 1 ? room.a2 : room.a1);
-    const leaderboard = await db.prepare("SELECT p.name, COUNT(*) AS wins, MIN(r.ended-r.start) AS best FROM rooms r JOIN players p ON p.id=r.winner WHERE r.status='finished' GROUP BY p.id ORDER BY wins DESC, best ASC, p.name LIMIT 10").all();
-    return json({ now: Date.now(), player: { name: player.name }, room: { id: room.id, mode: room.friend_code ? 'friends' : 'public', invite: room.friend_code, ready: seat === 1 ? room.ready1 : room.ready2, opponentReady: seat === 1 ? room.ready2 : room.ready1, status: room.status, start: room.start, ended: room.ended, won: room.winner === id, opponent: opponent ? { name: opponent.name, connected: opponent.seen >= now - 10000 } : null, progress: Array.from({ length: 25 }, (_, i) => !!otherAnswers[i]), answers: ownAnswers.length ? ownAnswers : Array(25).fill(''), revision: seat === 1 ? room.rev1 : room.rev2, puzzle: room.status === 'waiting' || (room.start ?? Infinity) > now ? null : details.public }, incorrect, leaderboard: leaderboard.results });
+    const leaderboard = room.friend_code ? await db.prepare("SELECT p.name, COUNT(r.id) AS wins, MIN(r.ended-r.start) AS best FROM players p LEFT JOIN rooms r ON r.winner=p.id AND r.status='finished' AND r.friend_code=? WHERE p.id=? OR p.id=? GROUP BY p.id ORDER BY wins DESC, best ASC NULLS LAST, p.name").bind(room.friend_code,room.p1,room.p2).all() : {results:[]};
+    return json({ now: Date.now(), player: { name: player.name }, room: { id: room.id, mode: room.robot_ms ? 'robot' : room.friend_code ? 'friends' : 'public', invite: room.friend_code, ready: seat === 1 ? room.ready1 : room.ready2, opponentReady: seat === 1 ? room.ready2 : room.ready1, status: room.status, start: room.start, ended: room.ended, won: room.winner === id, opponent: opponent ? { name: opponent.name, connected: !!room.robot_ms || opponent.seen >= now - 10000 } : null, progress: Array.from({ length: 25 }, (_, i) => !!otherAnswers[i]), answers: ownAnswers.length ? ownAnswers : Array(25).fill(''), revision: seat === 1 ? room.rev1 : room.rev2, puzzle: room.status === 'waiting' || (room.start ?? Infinity) > now ? null : details.public }, incorrect, leaderboard: leaderboard.results });
     });
   } catch (error) {
     if (error instanceof SyntaxError) return json({ error: 'Invalid request' }, 400);
