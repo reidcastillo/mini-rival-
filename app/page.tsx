@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MilestonePopups } from '@/components/milestone-popups';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowRight, ArrowDown, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot, Compass } from 'lucide-react';
+import { ArrowRight, ArrowDown, ChevronLeft, ChevronRight, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot, Compass } from 'lucide-react';
 
 type Clue = { number: number; text: string; cells: number[] };
 type Puzzle = { title: string; blocks: boolean[]; numbers: Record<number, number>; across: Clue[]; down: Clue[]; total: number };
@@ -15,6 +15,9 @@ const themes = [{id:'classic', name:'Classic', icon:Sun}, {id:'dark', name:'Dark
 const empty = () => Array<string>(25).fill('');
 
 export default function Home() {
+  const [mobile, setMobile] = useState(false);
+  const [nativeEditing, setNativeEditing] = useState(false);
+  const nativeInput = useRef<HTMLInputElement>(null);
   const [game, setGame] = useState<Game | null>(null);
   const [answers, setAnswers] = useState<string[]>(empty);
   const [cell, setCell] = useState(0);
@@ -89,9 +92,31 @@ export default function Home() {
     return () => { clearInterval(poll); clearInterval(clock); };
   }, [sync]);
 
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 700px)');
+    const update = () => {
+      setMobile(query.matches);
+      document.documentElement.style.setProperty('--mobile-height', `${window.visualViewport?.height ?? window.innerHeight}px`);
+    };
+    update();
+    query.addEventListener('change', update);
+    window.visualViewport?.addEventListener('resize', update);
+    return () => {
+      query.removeEventListener('change', update);
+      window.visualViewport?.removeEventListener('resize', update);
+      document.documentElement.style.removeProperty('--mobile-height');
+    };
+  }, []);
+
+  const focusGrid = useCallback(() => {
+    if (window.matchMedia('(max-width: 700px)').matches) nativeInput.current?.focus({preventScroll:true});
+    else board.current?.focus({preventScroll:true});
+  }, []);
+
   const room = game?.room;
   const puzzle = room?.puzzle;
   const playing = room?.status === 'playing' && !!puzzle && now >= (room.start ?? Infinity);
+  useEffect(() => { if (!playing) setNativeEditing(false); }, [playing]);
   const finished = room?.status === 'finished';
   const cancelled = room?.status === 'cancelled';
   const countdown = room?.status === 'playing' && !puzzle;
@@ -103,8 +128,16 @@ export default function Home() {
   const chooseClue = useCallback((next: Clue, dir: 'across' | 'down') => {
     setDirection(dir);
     setCell(next.cells.find(i => !live.current.answers[i]) ?? next.cells[0]);
-    board.current?.focus({ preventScroll: true });
-  }, []);
+    focusGrid();
+  }, [focusGrid]);
+  function cycleClue(step: number) {
+    if (!puzzle || !clue) return;
+    const ordered = [...puzzle.across.map(clue => ({clue, dir:'across' as const})), ...puzzle.down.map(clue => ({clue, dir:'down' as const}))];
+    const index = ordered.findIndex(item => item.dir === direction && item.clue.number === clue.number);
+    const next = ordered[(index + step + ordered.length) % ordered.length];
+    chooseClue(next.clue, next.dir);
+  }
+
   const key = useCallback((value: string) => {
     if (!playing || !puzzle || !clue) return;
     const current = live.current;
@@ -177,7 +210,7 @@ export default function Home() {
     catch { setError('Select and copy the friend link below.'); }
   }
 
-  return <main>
+  return <main className={playing ? `live-race${nativeEditing ? ' native-editing' : ''}` : undefined}>
 
     <div className="theme-scenery" aria-hidden="true">
       <div className="space-sky"/>
@@ -190,15 +223,15 @@ export default function Home() {
     {error && <div className="connection-error" role="alert"><WifiOff size={17}/><span>{error}</span></div>}
     <div className="arena"><section className="play-panel" aria-label="Crossword duel">
       <div className="score-strip"><div className="player-label"><b><span className="player-dot"/>You</b><small>{game?.player.name ?? 'Joining the arena…'}</small></div><div className="timer-block"><span className="clock" aria-label="Elapsed time">{time(room?.start ? (room.ended ?? now) - room.start : 0)}</span><small>{finished ? 'FINAL TIME' : playing ? 'RACE CLOCK' : 'READY WHEN YOU ARE'}</small></div><div className="player-label opponent-label"><b>{room?.opponent ? 'Opponent' : 'Opponent'}<span className="player-dot rival"/></b><small>{room?.opponent?.name ?? 'Finding a rival…'}</small></div></div>
-      {room?.mode === 'robot' && room.status === 'waiting' ? <div className="waiting-surface robot-setup">
+      {room?.mode === 'robot' && room.status === 'waiting' ? <div className="waiting-surface robot-setup"><div className="robot-setup-content">
         <Bot size={38} aria-hidden="true"/>
         <div className="eyebrow">ROBOT PRACTICE</div><h2>Choose your challenge.</h2>
         <p>Pick a pace, then start your race.</p>
-        <fieldset className="difficulty-options"><legend>Robot difficulty</legend>
+        <fieldset className="difficulty-options"><legend>Robot difficulty</legend><div className="difficulty-cards">
           {([{id:'novice',name:'Novice',description:'A little more breathing room'}, {id:'intermediate',name:'Intermediate',description:'A quicker challenger'}] as const).map(level => <label key={level.id} className={difficulty === level.id ? 'chosen' : ''}><input type="radio" name="difficulty" value={level.id} checked={difficulty === level.id} onChange={() => setDifficulty(level.id)}/><span><b>{level.name}</b><small>{level.description}</small></span></label>)}
-        </fieldset>
+        </div></fieldset>
         <button className="primary-button" disabled={busy} onClick={() => void enter('robot')}>Start race<ArrowRight size={16}/></button>
-      </div> : !puzzle && !finished && !cancelled ? <div className="waiting-surface">
+      </div></div> : !puzzle && !finished && !cancelled ? <div className="waiting-surface">
         <div className="mini-mark" aria-hidden="true">{Array.from({length:25},(_,i)=><span key={i} className={[0,4,20,24].includes(i)?'black':''}/>)}</div>
         <div className="eyebrow">{countdown ? 'MATCH FOUND' : room?.mode === 'friends' ? 'FRIENDS ROOM' : 'MATCHMAKING'}</div>
         <h2>{countdown ? 'Your rival is here.' : room?.mode === 'friends' ? 'Save a seat for your friend.' : 'Finding your next rival…'}</h2>
@@ -214,13 +247,26 @@ export default function Home() {
         {puzzle && <><div className="puzzle-edition">{puzzle.title}<span>Original Mini Duel puzzle</span></div><div className="race-progress"><div><div className="progress-label"><b>Your grid</b><span>{filled}/{puzzle.total}</span></div><Progress value={filled / puzzle.total * 100} aria-label="Your filled squares"/></div><div className="rival-progress"><div className="progress-label"><b>Their grid</b><span>{opponentFilled}/{puzzle.total}</span></div><Progress value={opponentFilled / puzzle.total * 100} aria-label="Opponent filled squares"/></div></div>
         <div className="puzzle-area"><div className="grid-column"><div className="active-clue"><b>{clue?.number}{direction === 'across' ? 'A' : 'D'}</b><span>{clue?.text}</span><button aria-label="Switch direction" onClick={() => setDirection(d => d === 'across' ? 'down' : 'across')}>{direction === 'across' ? <ArrowRight size={20}/> : <ArrowDown size={20}/>}</button></div>
           <div className="board-wrap">
-    <MilestonePopups roomId={room?.id ?? ''} active={playing} total={puzzle?.total ?? 0} yours={filled} theirs={opponentFilled}/>
+    {!mobile && <MilestonePopups roomId={room?.id ?? ''} active={playing} total={puzzle?.total ?? 0} yours={filled} theirs={opponentFilled}/>}
           <div ref={board} className="crossword" role="group" aria-label="Crossword grid. Type letters, use arrows to move, Enter to switch direction, and Tab to change clues." tabIndex={0}>
-            {puzzle.blocks.map((blocked, i) => blocked ? <div className="square block" key={i}/> : <button key={i} tabIndex={-1} disabled={!playing} aria-label={`Row ${Math.floor(i / 5) + 1}, column ${i % 5 + 1}${puzzle.numbers[i] ? `, clue ${puzzle.numbers[i]}` : ''}, ${answers[i] || 'empty'}`} aria-pressed={cell === i} className={`square ${clue?.cells.includes(i) ? 'word-selected' : ''} ${cell === i ? 'selected' : ''}`} onClick={() => { if (cell === i) setDirection(d => d === 'across' ? 'down' : 'across'); setCell(i); board.current?.focus({preventScroll:true}); }}><small>{puzzle.numbers[i]}</small><span>{answers[i]}</span></button>)}
+            {puzzle.blocks.map((blocked, i) => blocked ? <div className="square block" key={i}/> : <button key={i} tabIndex={-1} disabled={!playing} aria-label={`Row ${Math.floor(i / 5) + 1}, column ${i % 5 + 1}${puzzle.numbers[i] ? `, clue ${puzzle.numbers[i]}` : ''}, ${answers[i] || 'empty'}`} aria-pressed={cell === i} className={`square ${clue?.cells.includes(i) ? 'word-selected' : ''} ${cell === i ? 'selected' : ''}`} onClick={() => { if (cell === i) setDirection(d => d === 'across' ? 'down' : 'across'); setCell(i); focusGrid(); }}><small>{puzzle.numbers[i]}</small><span>{answers[i]}</span></button>)}
           </div>
+          {mobile && playing && <input ref={nativeInput} className="native-grid-input" style={{left:`${cell % 5 * 20}%`,top:`${Math.floor(cell / 5) * 20}%`}} aria-label={`Type a letter for row ${Math.floor(cell / 5)+1}, column ${cell % 5+1}`} type="text" inputMode="text" autoCapitalize="characters" autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="next" defaultValue=" " onFocus={() => setNativeEditing(true)} onBlur={() => setNativeEditing(false)} onChange={event => {
+            const input = event.nativeEvent as InputEvent;
+            if (input.inputType?.startsWith('delete')) key('Backspace');
+            else { const letters = event.currentTarget.value.match(/[a-z]/gi); if (letters?.length) key(letters[letters.length-1]); }
+            event.currentTarget.value = ' ';
+          }} onKeyDown={event => {
+            if (['Backspace','Enter','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) { event.preventDefault(); key(event.key); }
+          }}/>}
           </div>
+          {mobile && <div className="mobile-clue-bar" aria-label="Clue navigation">
+            <button aria-label="Previous clue" onMouseDown={event => event.preventDefault()} onClick={() => cycleClue(-1)}><ChevronLeft size={24}/></button>
+            <button className="mobile-clue-text" aria-label="Current clue. Tap for next clue" onMouseDown={event => event.preventDefault()} onClick={() => cycleClue(1)}><b>{clue?.number}{direction === 'across' ? 'A' : 'D'}</b><span>{clue?.text}</span></button>
+            <button aria-label="Next clue" onMouseDown={event => event.preventDefault()} onClick={() => cycleClue(1)}><ChevronRight size={24}/></button>
+          </div>}
           <div className="grid-message" role="status">{game?.incorrect && filled === puzzle.total && playing ? 'The grid is full, but something’s not right. Keep going!' : playing ? 'Fill every square correctly to win.' : 'Your grid at the finish.'}</div>
-          <div className="keyboard" aria-label="Letter keyboard">{['QWERTYUIOP','ASDFGHJKL','ZXCVBNM'].map((row,i)=><div className="key-row" key={row}>{i === 2 && <button disabled={!playing} aria-label="Switch across and down" onClick={()=>key('Enter')}><ArrowRight size={17}/></button>}{row.split('').map(letter=><button disabled={!playing} key={letter} onClick={()=>key(letter)}>{letter}</button>)}{i === 2 && <button disabled={!playing} aria-label="Backspace" onClick={()=>key('Backspace')}><Delete size={18}/></button>}</div>)}</div>
+          {!mobile && <div className="keyboard" aria-label="Letter keyboard">{['QWERTYUIOP','ASDFGHJKL','ZXCVBNM'].map((row,i)=><div className="key-row" key={row}>{i === 2 && <button disabled={!playing} aria-label="Switch across and down" onClick={()=>key('Enter')}><ArrowRight size={17}/></button>}{row.split('').map(letter=><button disabled={!playing} key={letter} onClick={()=>key(letter)}>{letter}</button>)}{i === 2 && <button disabled={!playing} aria-label="Backspace" onClick={()=>key('Backspace')}><Delete size={18}/></button>}</div>)}</div>}
         </div><div className="clue-lists">{(['across','down'] as const).map(dir=><section key={dir}><h3>{dir}</h3>{puzzle[dir].map(c=><button className={direction === dir && clue?.number === c.number ? 'clue-active' : ''} key={c.number} onClick={()=>chooseClue(c, dir)}><b>{c.number}</b><span>{c.text}</span></button>)}</section>)}</div></div></>}
       </>}
     </section><aside className="sidebar">
