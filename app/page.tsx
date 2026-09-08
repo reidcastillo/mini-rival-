@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowRight, ArrowDown, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot } from 'lucide-react';
+import { ArrowRight, ArrowDown, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot, Compass } from 'lucide-react';
 
 type Clue = { number: number; text: string; cells: number[] };
 type Puzzle = { title: string; blocks: boolean[]; numbers: Record<number, number>; across: Clue[]; down: Clue[]; total: number };
 type Game = { now: number; player: { name: string }; room: { id: string; mode: 'public' | 'friends' | 'robot'; invite: string | null; ready: boolean; opponentReady: boolean; status: string; start: number | null; ended: number | null; won: boolean; opponent: { name: string; connected: boolean } | null; progress: boolean[]; answers: string[]; revision: number; puzzle: Puzzle | null }; incorrect: boolean; leaderboard: { name: string; wins: number; best: number | null }[] };
 const time = (ms: number) => `${Math.floor(Math.max(0, ms) / 60000)}:${String(Math.floor(Math.max(0, ms) / 1000) % 60).padStart(2, '0')}`;
-type Theme = 'classic' | 'dark' | 'jungle' | 'space';
-const themes = [{id:'classic', name:'Classic', icon:Sun}, {id:'dark', name:'Dark', icon:Moon}, {id:'jungle', name:'Jungle', icon:Trees}, {id:'space', name:'Space', icon:Rocket}] as const;
+type Theme = 'classic' | 'dark' | 'jungle' | 'space' | 'western';
+const themes = [{id:'classic', name:'Classic', icon:Sun}, {id:'dark', name:'Dark', icon:Moon}, {id:'jungle', name:'Jungle', icon:Trees}, {id:'space', name:'Space', icon:Rocket}, {id:'western', name:'Western', icon:Compass}] as const;
 const empty = () => Array<string>(25).fill('');
 
 export default function Home() {
@@ -177,12 +177,11 @@ export default function Home() {
 
   return <main>
     <div className="theme-scenery" aria-hidden="true">
-      <svg className="jungle-scenery" viewBox="0 0 1200 220" preserveAspectRatio="none"><path fill="#246c36" d="M0 220V95l25 80 14-125 22 119 28-65 15 78 25-135 20 134 36-93 5 84 30-133 22 135 30-61 25 79 38-119 20 107 29-68 21 90 37-137 18 135 28-80 27 91 34-130 28 124 34-85 18 91 35-110 25 100 32-64 28 68 33-133 18 120 31-74 29 94 25-125 34 124 29-76 26 70 40-115 17 118 29-69 34 75 38-115 16 111 33-81 20 88 38-131 16 120 36-75 28 84 22-108 30 100 32-55 34 83v80Z"/><path fill="#60ad45" d="M0 220v-35l32-59-8 73 55-52-20 58 51-24 25-77 13 83 60-29-29 51 71-54-17 52 58-11 29-97 9 98 70-39-17 48 69-68-24 72 57-37 29-75 12 83 59-17 40-69-8 90 66-46 30-60-4 92 65-50 30-35-5 69 70-44 37-37-12 77 68-59 39-41-13 90 70-43 43-79-6 95 65-58 35-40-6 90 69-34v80Z"/></svg>
-      <svg className="space-planet planet-one" viewBox="0 0 140 100"><circle cx="70" cy="50" r="32" fill="#d09aff" stroke="#302356" strokeWidth="4"/><path d="M45 34q23 12 47 5M40 51q28 14 58 6M49 71q18 7 34 4" fill="none" stroke="#a570dd" strokeWidth="7"/><ellipse cx="70" cy="54" rx="62" ry="14" fill="none" stroke="#ffc875" strokeWidth="8" transform="rotate(-20 70 54)"/></svg>
-      <svg className="space-planet planet-two" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#78cbd4" stroke="#244364" strokeWidth="4"/><path d="m26 18 20 9-5 18 21 8 13-8 12 17-17 19-23-8-6-19-17 4-11-17Z" fill="#45a697"/><circle cx="70" cy="27" r="7" fill="#c8f5df"/></svg>
-      <svg className="space-rocket" viewBox="0 0 100 150"><path d="m39 104 11 38 12-38" fill="#ffbd65"/><path d="m36 71-22 31 20-3m31-28 21 31-21-3" fill="#e989b5" stroke="#493164" strokeWidth="3"/><path d="M34 107Q22 50 50 9q29 41 16 98Z" fill="#f6f0ff" stroke="#493164" strokeWidth="4"/><path d="M36 35Q42 18 50 9q10 14 15 26Z" fill="#e989b5"/><circle cx="50" cy="57" r="12" fill="#7bcfee" stroke="#493164" strokeWidth="4"/></svg>
+      <div className="space-sky"/>
+      <div className="jungle-scenery"/>
+      <div className="western-scenery"/>
     </div>
-    <header className="masthead"><a className="brand" href="/">Mini Duel<span className="brand-square">M</span></a><span className="edition">THE HEAD-TO-HEAD CROSSWORD</span><details className="theme-picker"><summary><Palette size={17}/> Themes</summary><div className="theme-options" role="group" aria-label="Site theme">{themes.map(t => <button key={t.id} aria-pressed={theme === t.id} onClick={event => { changeTheme(t.id); event.currentTarget.closest('details')?.removeAttribute('open'); }}><t.icon size={18}/>{t.name}{theme === t.id && <Check size={15}/>}</button>)}</div></details></header>
+    <header className="masthead"><a className="brand" href="/">Mini Duel<img className="brand-icon" src="/crossword-icon.svg" width="40" height="40" alt="" aria-hidden="true"/></a><span className="edition">THE HEAD-TO-HEAD CROSSWORD</span><details className="theme-picker"><summary><Palette size={17}/> Themes</summary><div className="theme-options" role="group" aria-label="Site theme">{themes.map(t => <button key={t.id} aria-pressed={theme === t.id} onClick={event => { changeTheme(t.id); event.currentTarget.closest('details')?.removeAttribute('open'); }}><t.icon size={18}/>{t.name}{theme === t.id && <Check size={15}/>}</button>)}</div></details></header>
     <section className="title-row"><div><div className="eyebrow">QUICK PUZZLE. REAL COMPETITION.</div><h1>The Mini, with a rival.</h1></div><span className="mode-pill">1 VS 1 · CLASSIC</span></section>
     <nav className="mode-switch" aria-label="Match mode"><button aria-pressed={!room || room.mode === 'public'} disabled={busy || playing || countdown} onClick={() => void enter('public')}><Globe size={16}/> Public match</button><button aria-pressed={room?.mode === 'friends'} disabled={busy || playing || countdown} onClick={() => void enter('friends')}><Users size={16}/> Play with a friend</button><button aria-pressed={room?.mode === 'robot'} disabled={busy || playing || countdown} onClick={() => void enter('robot')}><Bot size={16}/> Robot</button><span>{room?.mode === 'friends' ? 'Private room · just the two of you' : room?.mode === 'robot' ? 'Beat the robot · solves in 30–45 seconds' : 'Match with the next player online'}</span></nav>
     {error && <div className="connection-error" role="alert"><WifiOff size={17}/><span>{error}</span></div>}
