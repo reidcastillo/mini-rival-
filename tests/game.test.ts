@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import variants from '../data/clue-variants.json' with { type: 'json' };
 import dictionary from '../data/pop-culture-words.json' with { type: 'json' };
 import { puzzleDetails, puzzles } from '../lib/puzzles.ts';
 
@@ -20,19 +21,19 @@ test('every puzzle is a complete, consistently numbered 5×5 crossword', () => {
   }
 });
 
-test('generated library has 100 unique, connected, fully checked grids with original clues', () => {
-  assert.ok(puzzles.length >= 101);
+test('generated library has 500 unique, connected, fully checked grids with original clues', () => {
+  assert.ok(puzzles.length === 501);
   const seen = new Set<string>();
   for (let i = 1; i < puzzles.length; i++) {
     const { solution, public: p } = puzzleDetails(i);
     const signature = solution.join(''); assert.ok(!seen.has(signature)); seen.add(signature);
-    assert.equal(p.total, 17);
+    assert.ok(p.total >= 17 && p.total <= 25);
     const words = new Set<string>();
     for (const clue of [...p.across, ...p.down]) {
       assert.ok(clue.cells.length >= 3);
       const answer = clue.cells.map(c => solution[c]).join('');
       assert.ok(!words.has(answer)); words.add(answer);
-      assert.equal(clue.text, dictionary[answer as keyof typeof dictionary]);
+      assert.ok([dictionary[answer as keyof typeof dictionary], ...(variants[answer as keyof typeof variants] ?? [])].includes(clue.text));
     }
     const visited = new Set<number>(), queue = [solution.findIndex(x => x !== '#')];
     while (queue.length) {
@@ -174,7 +175,7 @@ test('friend links isolate pairs and rematches require both players every round'
   await call(b,{action:'replay',roomId:abandoned.room.id},409);
 });
 
-test('robot progresses on server time, finishes in 30–45 seconds, and can be beaten', {skip:!base}, async () => {
+test('robot progresses on server time, supports both difficulties, waits for selection, and can be beaten', {skip:!base}, async () => {
   assert.ok(/^http:\/\/(localhost|127\.0\.0\.1):/.test(base!));
   const url = new URL(process.env.DATABASE_URL!);
   assert.ok(['localhost','127.0.0.1'].includes(url.hostname));
@@ -187,7 +188,14 @@ test('robot progresses on server time, finishes in 30–45 seconds, and can be b
     return response.json() as Promise<any>;
   }
   try {
-    const created = await call({action:'robot'});
+    const setup = await call({action:'robot-setup'});
+    assert.equal(setup.room.status,'waiting');assert.equal(setup.room.start,null);
+    const stillWaiting = await call({action:'sync'});assert.equal(stillWaiting.room.status,'waiting');
+    const outsider = await fetch(`${base}/api/game`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${crypto.randomUUID()+crypto.randomUUID()}`},body:JSON.stringify({action:'join'})});
+    assert.notEqual((await outsider.json()).room.id,setup.room.id);
+    const invalid = await fetch(`${base}/api/game`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify({action:'robot',difficulty:'invalid'})});assert.equal(invalid.status,400);
+    const created = await call({action:'robot',difficulty:'intermediate'});
+    assert.equal(created.room.robotDifficulty,'intermediate');
     assert.equal(created.room.mode,'robot');assert.equal(created.room.opponent.name,'Robot');
     assert.match(created.player.name,/^[A-Za-z ]+$/);
     assert.equal(created.room.puzzle,null);assert.deepEqual(created.leaderboard,[]);
@@ -204,7 +212,13 @@ test('robot progresses on server time, finishes in 30–45 seconds, and can be b
     assert.equal(ended.room.status,'finished');assert.equal(ended.room.won,false);
     assert.equal(ended.room.ended-ended.room.start,initial.robot_ms);
     assert.equal(ended.room.progress.filter(Boolean).length,ended.room.puzzle.total);
-    const next = await call({action:'replay',roomId:ended.room.id});
+    const replaySetup = await call({action:'replay',roomId:ended.room.id});
+    assert.equal(replaySetup.room.status,'waiting');
+    const next = await call({action:'robot',difficulty:'novice'});
+    assert.equal(next.room.robotDifficulty,'novice');
+    const novice = (await db.query('SELECT * FROM rooms WHERE id=$1',[next.room.id])).rows[0];
+    assert.ok(novice.robot_ms>=45000 && novice.robot_ms<=60000);
+    assert.notEqual(novice.puzzle,initial.puzzle);
     assert.equal(next.room.mode,'robot');assert.notEqual(next.room.id,ended.room.id);
     await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-1000,next.room.id]);
     const started = await call({action:'sync'});
@@ -212,7 +226,7 @@ test('robot progresses on server time, finishes in 30–45 seconds, and can be b
     const correct = puzzleDetails(index).solution.map(x=>x==='#'?'':x);
     const won = await call({action:'sync',roomId:next.room.id,answers:correct,revision:1});
     assert.equal(won.room.won,true);assert.equal(won.room.status,'finished');
-    await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-50000,next.room.id]);
+    await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-61000,next.room.id]);
     const stable = await call({action:'sync'});
     assert.equal(stable.room.won,true);
   } finally {await db.end();}

@@ -35,14 +35,14 @@ export function MilestonePopups({roomId, active, total, yours, theirs}: Props) {
   const current = queue[0];
   useEffect(() => {
     if (!current) return;
-    const timeout = setTimeout(() => setQueue(items => items.slice(1)), 2400);
+    const timeout = setTimeout(() => setQueue(items => items.slice(1)), 2100);
     return () => clearTimeout(timeout);
   }, [current]);
 
   return <div className="milestone-region" role="status" aria-live="polite" aria-atomic="true">
     {active && current?.room === roomId && <div key={`${current.room}-${current.side}-${current.percent}`} className={`milestone-popup ${current.side}`}>
-      <span className="milestone-percent" aria-hidden="true">{current.percent}%</span>
-      <div><strong>{current.side === 'you' ? `You’ve filled ${current.percent}%!` : `Your opponent has filled ${current.percent}%!`}</strong><span>{current.side === 'you' ? current.percent === 75 ? 'The finish is in sight.' : current.percent === 50 ? 'Halfway there. Keep going!' : 'You’re off to a great start.' : current.percent === 75 ? 'They’re closing in on the finish.' : current.percent === 50 ? 'They’re halfway through their grid.' : 'The race is on.'}</span></div>
+      <span className="milestone-dot" aria-hidden="true"/>
+      <span>{current.side === 'you' ? 'You' : 'Opponent'} · <strong>{current.percent}%</strong> filled</span>
     </div>}
   </div>;
 }

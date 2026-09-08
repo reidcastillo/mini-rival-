@@ -3,8 +3,16 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 
 const dictionary = JSON.parse(readFileSync(new URL('../data/pop-culture-words.json', import.meta.url), 'utf8'));
+const variants = JSON.parse(readFileSync(new URL('../data/clue-variants.json', import.meta.url), 'utf8'));
+const clueUsage = new Map();
+function clueFor(word) {
+  const options = [dictionary[word], ...(variants[word] ?? [])];
+  const clue = options.map(text => ({text, count: clueUsage.get(text) ?? 0, tie: random()})).sort((a,b) => a.count-b.count || a.tie-b.tie)[0].text;
+  clueUsage.set(clue, (clueUsage.get(clue) ?? 0) + 1);
+  return clue;
+}
 const destination = new URL('../data/pop-culture-puzzles.json', import.meta.url);
-const requested = Number(process.argv[2] ?? 100);
+const requested = Number(process.argv[2] ?? 500);
 if (!Number.isInteger(requested) || requested < 1 || requested > 500) throw new Error('Choose 1–500 puzzles.');
 const byLength = new Map();
 for (const [answer, clue] of Object.entries(dictionary)) {
@@ -13,8 +21,9 @@ for (const [answer, clue] of Object.entries(dictionary)) {
 }
 let state = 832719;
 const random = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
-const shuffled = list => [...list].sort(() => random() - .5);
-const masks = [ ['##...','##...','.....','...##','...##'], ['...##','...##','.....','##...','##...'] ];
+const usage = new Map();
+const shuffled = list => list.map(word => ({word, score: (usage.get(word) ?? 0) + random() * 12})).sort((a,b) => a.score-b.score).map(x => x.word);
+const masks = [ ['##...','##...','.....','...##','...##'], ['...##','...##','.....','##...','##...'], ['##...','#....','.....','....#','...##'], ['...##','....#','.....','#....','##...'], ['#....','#....','.....','....#','....#'], ['....#','....#','.....','#....','#....'] ];
 function slotsFor(mask) {
   const grid = mask.join('').split(''); const slots = []; let number = 0;
   for (let i = 0; i < 25; i++) {
@@ -33,12 +42,20 @@ function slotsFor(mask) {
 }
 const existing = (() => { try { return JSON.parse(readFileSync(destination, 'utf8')); } catch { return []; } })();
 const results = [...existing]; const seen = new Set(results.map(p => p.rows.join('')));
+for (const puzzle of results) {
+  for (const clue of [...puzzle.across,...puzzle.down]) clueUsage.set(clue,(clueUsage.get(clue) ?? 0)+1);
+  const grid = puzzle.rows.join('');
+  for (const slot of slotsFor(puzzle.rows)) {
+    const word = slot.cells.map(i => grid[i]).join('');
+    usage.set(word, (usage.get(word) ?? 0) + 1);
+  }
+}
 let attempts = 0;
 while (results.length < requested && attempts++ < 10000) {
   const mask = masks[attempts % masks.length], slots = slotsFor(mask), grid = mask.join('').split('');
   const used = new Set(), assigned = new Map(); let nodes = 0;
   function solve() {
-    if (++nodes > 12000) return false;
+    if (++nodes > 2500) return false;
     if (assigned.size === slots.length) return !seen.has(grid.join(''));
     let selected, candidates;
     for (const slot of slots) {
@@ -57,10 +74,11 @@ while (results.length < requested && attempts++ < 10000) {
   }
   if (!solve()) continue;
   const rows = Array.from({length:5},(_,r) => grid.slice(r*5,r*5+5).join(''));
-  const sort = dir => slots.filter(s => s.direction === dir).sort((a,b) => a.number-b.number).map(s => dictionary[assigned.get(s)]);
+  const sort = dir => slots.filter(s => s.direction === dir).sort((a,b) => a.number-b.number).map(s => clueFor(assigned.get(s)));
   const id = createHash('sha256').update(rows.join('')).digest('hex').slice(0,12);
   results.push({ id: `pop-${id}`, title: 'Pop Culture Mix', rows, across: sort('across'), down: sort('down') });
   seen.add(rows.join(''));
+  for (const word of used) usage.set(word, (usage.get(word) ?? 0) + 1);
 }
 if (results.length < requested) throw new Error(`Only ${results.length} valid grids found; expand the word library. No output changed.`);
 writeFileSync(destination, JSON.stringify(results,null,2)+'\n');

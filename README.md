@@ -2,7 +2,7 @@
 
 Visitors automatically enter a waiting room, pair with the next player, and race on the same puzzle. Includes a timer, live opponent progress, server-checked wins, and a persistent leaderboard.
 
-The repository contains **100 generated 5×5 puzzles**.
+The repository contains **500 generated 5×5 puzzles**.
 
 ## Program breakdown
 
@@ -18,7 +18,11 @@ The repository contains **100 generated 5×5 puzzles**.
 ## Generate more pop-culture puzzles
 
 ```sh
-npm run puzzles:generate -- 150
+npm run puzzles:generate -- 500
 ```
 
-This grows the library to the requested total, up to 500. Existing order is preserved because saved matches reference puzzle indices. The first legacy puzzle stays at index zero; new races choose generated puzzles and avoid the waiting player's last 20 grids. Extend the curated dictionary for more variety. Each generated puzzle has 17 playable squares, two five-letter entries, and no repeated word within the grid. Individual words and clues can recur across different grids. All words cross correctly and every white square belongs to an across and a down entry. Commit the generated JSON and redeploy to make additions available.
+Existing puzzle order is preserved because saved matches reference puzzle indices. The legacy puzzle stays at index zero. New races choose from 500 generated grids, avoid grids in recent match history, and favor answers that have not appeared in the last few races. Both players’ histories are considered when pairing. Common short answers can still recur, with alternate clues providing additional variety.
+
+The generator uses several layouts, checks every crossing, and prevents repeated answers within a grid. `data/clue-variants.json` contains alternate clues. Extend the dictionary and regenerate to add variety. Commit generated data and redeploy to publish it.
+
+Robot practice starts with a difficulty selection: Novice takes 45–60 seconds and Intermediate takes 30–45 seconds. Each rematch returns to setup. Apply new database migrations with `npm run db:migrate` before deploying changes to database fields.
