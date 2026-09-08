@@ -212,6 +212,16 @@ test('robot progresses on server time, supports both difficulties, waits for sel
     assert.equal(ended.room.status,'finished');assert.equal(ended.room.won,false);
     assert.equal(ended.room.ended-ended.room.start,initial.robot_ms);
     assert.equal(ended.room.progress.filter(Boolean).length,ended.room.puzzle.total);
+    const losingSolution = puzzleDetails(initial.puzzle).solution.map(x=>x==='#'?'':x);
+    const completed = await call({action:'sync',roomId:ended.room.id,answers:losingSolution,revision:1});
+    assert.equal(completed.room.solved,true);
+    assert.equal(completed.room.won,false);
+    assert.equal(completed.room.ended,ended.room.ended);
+    assert.equal(completed.room.status,'finished');
+    const resumed = await call({action:'sync'});
+    assert.deepEqual(resumed.room.answers,losingSolution);
+    const staleFinish = await call({action:'sync',roomId:ended.room.id,answers:Array(25).fill(''),revision:1});
+    assert.equal(staleFinish.room.solved,true);
     const replaySetup = await call({action:'replay',roomId:ended.room.id});
     assert.equal(replaySetup.room.status,'waiting');
     const next = await call({action:'robot',difficulty:'novice'});
