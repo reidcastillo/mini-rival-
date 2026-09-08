@@ -51,10 +51,9 @@ main{padding-bottom:36px}.mode-switch>span{flex-basis:100%;margin:4px 0 0}.mode-
 .difficulty-cards label>span{display:flex;flex-direction:column;gap:5px;min-width:0}
 .difficulty-cards b{font-size:16px;line-height:1.4}.difficulty-cards small{font-size:13px;line-height:1.5;color:var(--muted-foreground);margin:0}
 .robot-setup-content>.primary-button{width:100%;justify-content:center;min-height:48px;margin-top:4px}
-.native-grid-input{position:absolute;width:20%;height:20%;opacity:.01;border:0;padding:0;font-size:16px;pointer-events:none;color:transparent;caret-color:transparent;background:transparent}
 .mobile-clue-bar{display:none}
 @media(max-width:700px){
-  .milestone-region,.keyboard{display:none!important}
+  .milestone-region{display:none!important}
   .board-wrap{padding-top:0}
   .grid-column>.active-clue{display:none}
   .mobile-clue-bar{display:flex;align-items:center;position:sticky;bottom:0;z-index:3;min-height:64px;margin-top:12px;background:#b4ddfa;color:#15283c;border-radius:4px}
@@ -68,11 +67,13 @@ main{padding-bottom:36px}.mode-switch>span{flex-basis:100%;margin:4px 0 0}.mode-
   .live-race .timer-block>small{display:none}
   .live-race .race-progress{padding:8px 12px;gap:16px}
   .live-race .puzzle-area{padding:10px}
-  .live-race .board-wrap{width:min(100%,max(180px,calc(var(--mobile-height,100dvh) - 240px)))}
+  .board-wrap{width:min(100%,440px)}
   .live-race .crossword{width:100%}
   .live-race .square>span{font-size:clamp(18px,6vw,30px)}
   .robot-setup{padding:32px 20px;min-height:0}
   .robot-setup-content h2{font-size:27px}
 }
 
-@media(max-width:700px){.live-race.native-editing .masthead{display:none}}
+
+
+@media(max-width:700px){.keyboard{display:block;margin:12px auto 0;max-width:440px}.key-row button{height:46px}.crossword{grid-template-rows:repeat(5,minmax(0,1fr))}}

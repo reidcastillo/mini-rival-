@@ -1,5 +1,4 @@
-.nativeInput,.nativeInput:focus,.nativeInput:focus-visible{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;border:0!important;outline:none!important;box-shadow:none!important;padding:0!important;caret-color:transparent!important;pointer-events:none!important;-webkit-appearance:none}
-.clueBar{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;min-height:82px;gap:4px;margin:14px auto 0;padding:8px 2px;background:#c4e4fb;color:#172d40;border-radius:8px;width:100%}
+.clueBar{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;min-height:82px;gap:4px;margin:14px auto 0;padding:8px 2px;background:#c4e4fb;color:#172d40;border-radius:8px;width:100%}
 .clueBar button{display:flex;align-items:center;justify-content:center;min-height:48px;padding:6px;border:0;background:transparent;color:inherit}
 .clueBar .clueText{flex-direction:column;gap:5px;text-align:center;line-height:1.4;min-width:0;font-size:16px}
 .clueText b{display:block;font-size:11px;font-weight:700;letter-spacing:.5px;line-height:1.3}

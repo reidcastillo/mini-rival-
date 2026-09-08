@@ -5,7 +5,7 @@ import mobileStyles from './mobile-game.module.css';
 import { MilestonePopups } from '@/components/milestone-popups';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowRight, ArrowDown, ChevronLeft, ChevronRight, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot, Compass } from 'lucide-react';
+import { ArrowRight, ArrowDown, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot, Compass } from 'lucide-react';
 
 type Clue = { number: number; text: string; cells: number[] };
 type Puzzle = { title: string; blocks: boolean[]; numbers: Record<number, number>; across: Clue[]; down: Clue[]; total: number };
@@ -17,8 +17,6 @@ const empty = () => Array<string>(25).fill('');
 
 export default function Home() {
   const [mobile, setMobile] = useState(false);
-  const [nativeEditing, setNativeEditing] = useState(false);
-  const nativeInput = useRef<HTMLInputElement>(null);
   const [game, setGame] = useState<Game | null>(null);
   const [answers, setAnswers] = useState<string[]>(empty);
   const [cell, setCell] = useState(0);
@@ -97,28 +95,22 @@ export default function Home() {
     const query = window.matchMedia('(max-width: 700px)');
     const update = () => {
       setMobile(query.matches);
-      document.documentElement.style.setProperty('--mobile-height', `${window.visualViewport?.height ?? window.innerHeight}px`);
     };
     update();
     query.addEventListener('change', update);
-    window.visualViewport?.addEventListener('resize', update);
     return () => {
       query.removeEventListener('change', update);
-      window.visualViewport?.removeEventListener('resize', update);
-      document.documentElement.style.removeProperty('--mobile-height');
     };
   }, []);
 
   const focusGrid = useCallback(() => {
-    if (window.matchMedia('(max-width: 700px)').matches) nativeInput.current?.focus({preventScroll:true});
-    else board.current?.focus({preventScroll:true});
+    board.current?.focus({preventScroll:true});
   }, []);
 
   const room = game?.room;
   const puzzle = room?.puzzle;
   const playing = room?.status === 'playing' && !!puzzle && now >= (room.start ?? Infinity);
   const canEdit = playing || (room?.status === 'finished' && !!puzzle && !room.won && !room.solved && !room.ready);
-  useEffect(() => { if (!canEdit) setNativeEditing(false); }, [canEdit]);
   const finished = room?.status === 'finished';
   const cancelled = room?.status === 'cancelled';
   const countdown = room?.status === 'playing' && !puzzle;
@@ -212,7 +204,7 @@ export default function Home() {
     catch { setError('Select and copy the friend link below.'); }
   }
 
-  return <main className={playing || finished ? `live-race${nativeEditing ? ' native-editing' : ''}` : undefined}>
+  return <main className={playing || finished ? 'live-race' : undefined}>
 
     <div className="theme-scenery" aria-hidden="true">
       <div className="space-sky"/>
@@ -255,22 +247,12 @@ export default function Home() {
           <div ref={board} className="crossword" role="group" aria-label="Crossword grid. Type letters, use arrows to move, Enter to switch direction, and Tab to change clues." tabIndex={0}>
             {puzzle.blocks.map((blocked, i) => blocked ? <div className="square block" key={i}/> : <button key={i} tabIndex={-1} disabled={!canEdit} aria-label={`Row ${Math.floor(i / 5) + 1}, column ${i % 5 + 1}${puzzle.numbers[i] ? `, clue ${puzzle.numbers[i]}` : ''}, ${answers[i] || 'empty'}`} aria-pressed={cell === i} className={`square ${clue?.cells.includes(i) ? 'word-selected' : ''} ${cell === i ? 'selected' : ''}`} onClick={() => { if (cell === i) setDirection(d => d === 'across' ? 'down' : 'across'); setCell(i); focusGrid(); }}><small>{puzzle.numbers[i]}</small><span>{answers[i]}</span></button>)}
           </div>
-          {mobile && canEdit && <input ref={nativeInput} className={mobileStyles.nativeInput} style={{position:'absolute',width:1,height:1,opacity:0,border:0,outline:'none',boxShadow:'none',padding:0,caretColor:'transparent',fontSize:16,pointerEvents:'none',left:`${cell % 5 * 20}%`,top:`${Math.floor(cell / 5) * 20}%`}} aria-label={`Type a letter for row ${Math.floor(cell / 5)+1}, column ${cell % 5+1}`} type="text" inputMode="text" autoCapitalize="characters" autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="done" defaultValue=" " onFocus={() => setNativeEditing(true)} onBlur={() => setNativeEditing(false)} onChange={event => {
-            const input = event.nativeEvent as InputEvent;
-            if (input.inputType?.startsWith('delete')) key('Backspace');
-            else { const letters = event.currentTarget.value.match(/[a-z]/gi); if (letters?.length) key(letters[letters.length-1]); }
-            event.currentTarget.value = ' ';
-          }} onKeyDown={event => {
-            if (['Backspace','Enter','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) { event.preventDefault(); key(event.key); }
-          }}/>}
           </div>
           {mobile && <div className={mobileStyles.clueBar} aria-label="Clue navigation">
-            <button aria-label="Previous clue" onMouseDown={event => event.preventDefault()} onClick={() => cycleClue(-1)}><ChevronLeft size={24}/></button>
             <button className={mobileStyles.clueText} aria-label="Current clue. Tap for next clue" onMouseDown={event => event.preventDefault()} onClick={() => cycleClue(1)}><b>{clue?.number} {direction === 'across' ? 'Across' : 'Down'}</b><span>{clue?.text}</span></button>
-            <button aria-label="Next clue" onMouseDown={event => event.preventDefault()} onClick={() => cycleClue(1)}><ChevronRight size={24}/></button>
           </div>}
           <div className="grid-message" role="status">{game?.incorrect && filled === puzzle.total && canEdit ? 'The grid is full, but something’s not right. Keep going!' : playing ? 'Fill every square correctly to win.' : room?.solved && !room.won ? 'Puzzle complete. Nicely done!' : ''}</div>
-          {!mobile && <div className="keyboard" aria-label="Letter keyboard">{['QWERTYUIOP','ASDFGHJKL','ZXCVBNM'].map((row,i)=><div className="key-row" key={row}>{i === 2 && <button disabled={!canEdit} aria-label="Switch across and down" onClick={()=>key('Enter')}><ArrowRight size={17}/></button>}{row.split('').map(letter=><button disabled={!canEdit} key={letter} onClick={()=>key(letter)}>{letter}</button>)}{i === 2 && <button disabled={!canEdit} aria-label="Backspace" onClick={()=>key('Backspace')}><Delete size={18}/></button>}</div>)}</div>}
+          <div className="keyboard" aria-label="Letter keyboard">{['QWERTYUIOP','ASDFGHJKL','ZXCVBNM'].map((row,i)=><div className="key-row" key={row}>{i === 2 && <button disabled={!canEdit} aria-label="Switch across and down" onClick={()=>key('Enter')}><ArrowRight size={17}/></button>}{row.split('').map(letter=><button disabled={!canEdit} key={letter} onClick={()=>key(letter)}>{letter}</button>)}{i === 2 && <button disabled={!canEdit} aria-label="Backspace" onClick={()=>key('Backspace')}><Delete size={18}/></button>}</div>)}</div>
         </div><div className="clue-lists">{(['across','down'] as const).map(dir=><section key={dir}><h3>{dir}</h3>{puzzle[dir].map(c=><button className={direction === dir && clue?.number === c.number ? 'clue-active' : ''} key={c.number} onClick={()=>chooseClue(c, dir)}><b>{c.number}</b><span>{c.text}</span></button>)}</section>)}</div></div></>}
       </>}
     </section><aside className="sidebar">
