@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { MilestonePopups } from '@/components/milestone-popups';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowRight, ArrowDown, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot, Compass } from 'lucide-react';
@@ -176,6 +177,8 @@ export default function Home() {
   }
 
   return <main>
+    <MilestonePopups roomId={room?.id ?? ''} active={playing} total={puzzle?.total ?? 0} yours={filled} theirs={opponentFilled}/>
+
     <div className="theme-scenery" aria-hidden="true">
       <div className="space-sky"/>
       <div className="jungle-scenery"/>

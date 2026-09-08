@@ -1,10 +1,10 @@
 # Mini Duel
 
-A Vercel-ready, head-to-head mini crossword game built with **Next.js 16, React 19, and PostgreSQL**. Visitors automatically enter a waiting room, pair with the next player, and race on the same original pop-culture puzzle. Includes a timer, live opponent progress, server-checked wins, and a persistent leaderboard.
+Visitors automatically enter a waiting room, pair with the next player, and race on the same puzzle. Includes a timer, live opponent progress, server-checked wins, and a persistent leaderboard.
 
 The repository contains **100 generated 5×5 puzzles**.
 
-## Where to edit
+## Program breakdown
 
 - `app/page.tsx`: waiting room, board, input, timer, progress, results, leaderboard.
 - `app/globals.css`: styling and responsive layout.
