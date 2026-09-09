@@ -125,3 +125,14 @@ main{padding-bottom:36px}.mode-switch>span{flex-basis:100%;margin:4px 0 0}.mode-
   .desktop-race .opponent-grid{grid-column:1;grid-row:1/4;width:76px;height:76px;gap:2px;margin:0}
   .desktop-race .opponent-section p{grid-column:2;font-size:11px;line-height:1.5;margin:0}
 }
+
+.countdown-surface{overflow:hidden;background:radial-gradient(ellipse at 50% 70%,color-mix(in srgb,var(--primary) 12%,var(--surface)),var(--waiting) 70%)}
+.countdown-surface .mini-mark{display:none}
+.countdown-surface h2{font-size:clamp(28px,4vw,40px)}
+.countdown-stage{display:grid;place-items:center;width:100%;height:240px;margin:20px auto 0}
+.countdown-stage .countdown{position:relative;display:grid;place-items:center;width:210px;height:210px;font-size:clamp(110px,12vw,160px);line-height:1;font-weight:900;font-variant-numeric:tabular-nums;color:var(--primary);text-shadow:0 8px 30px color-mix(in srgb,var(--primary) 25%,transparent);animation:countdown-impact .85s cubic-bezier(.16,1,.3,1) both}
+.countdown-ring{position:absolute;inset:0;border:3px solid var(--primary);border-radius:50%;opacity:0;animation:countdown-ripple .85s ease-out both;pointer-events:none}
+@keyframes countdown-impact{0%{transform:scale(1.45);opacity:0}18%{opacity:1}45%{transform:scale(.96)}70%,100%{transform:scale(1);opacity:1}}
+@keyframes countdown-ripple{0%{transform:scale(.65);opacity:.65}100%{transform:scale(1.25);opacity:0}}
+@media(max-width:700px){.countdown-stage{height:210px}.countdown-stage .countdown{width:180px;height:180px;font-size:120px}}
+@media(prefers-reduced-motion:reduce){.countdown-stage .countdown{animation:none}.countdown-ring{animation:none}}

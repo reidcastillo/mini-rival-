@@ -137,6 +137,7 @@ export default function Home() {
   const finished = room?.status === 'finished';
   const cancelled = room?.status === 'cancelled';
   const countdown = room?.status === 'playing' && !puzzle;
+  const countdownNumber = Math.max(1, Math.ceil(((room?.start ?? now) - now) / 1000));
   const clues = (puzzle?.[direction] ?? []).map(clue => mirrored ? {...clue,cells:entryCells(clue.cells,true)} : clue);
   const clue = clues.find(c => c.cells.includes(cell)) ?? clues[0];
   const filled = answers.filter((x, i) => x && !puzzle?.blocks[i]).length;
@@ -271,12 +272,12 @@ export default function Home() {
           {([{id:'novice',name:'Novice',description:'A little more breathing room'}, {id:'intermediate',name:'Intermediate',description:'A quicker challenger'}] as const).map(level => <label key={level.id} className={difficulty === level.id ? 'chosen' : ''}><input type="radio" name="difficulty" value={level.id} checked={difficulty === level.id} onChange={() => setDifficulty(level.id)}/><span><b>{level.name}</b><small>{level.description}</small></span></label>)}
         </div></fieldset>
         <button className="primary-button" disabled={busy} onClick={() => void enter('robot')}>Start race<ArrowRight size={16}/></button>
-      </div></div> : !puzzle && !finished && !cancelled ? <div className="waiting-surface">
+      </div></div> : !puzzle && !finished && !cancelled ? <div className={`waiting-surface ${countdown ? 'countdown-surface' : ''}`}>
         <div className="mini-mark" aria-hidden="true">{Array.from({length:25},(_,i)=><span key={i} className={[0,4,20,24].includes(i)?'black':''}/>)}</div>
         <div className="eyebrow">{countdown ? 'MATCH FOUND' : room?.mode === 'friends' ? 'FRIENDS ROOM' : 'MATCHMAKING'}</div>
         <h2>{countdown ? 'Your rival is here.' : room?.mode === 'friends' ? 'Save a seat for your friend.' : 'Finding your next rival…'}</h2>
         <p>{countdown ? <>Get ready. Your puzzle opens together.</> : room?.mode === 'friends' ? <>Send this link to your friend.<br/>Your race starts when they join.</> : <>You’re in the waiting room.<br/>The next player to arrive joins your game.</>}</p>
-        <div className="waiting-status" role="status">{countdown ? <b className="countdown">{Math.max(1, Math.ceil(((room?.start ?? now) - now) / 1000))}</b> : <><i/>{game ? room?.mode === 'friends' ? 'Waiting for your friend' : 'Waiting for one more player' : 'Connecting to the arena'}</>}</div>
+        <div className={countdown ? "countdown-stage" : "waiting-status"} role="status" aria-live="polite">{countdown ? <b key={countdownNumber} className="countdown"><span className="countdown-ring" aria-hidden="true"/>{countdownNumber}</b> : <><i/>{game ? room?.mode === 'friends' ? 'Waiting for your friend' : 'Waiting for one more player' : 'Connecting to the arena'}</>}</div>
         {!countdown && (room?.mode === 'friends' ? <div className="friend-invite"><label htmlFor="friend-link">Your private invite link</label><div><input id="friend-link" readOnly value={inviteUrl} onFocus={e => e.currentTarget.select()}/><button className="primary-button" onClick={copyLink}>{copied ? <Check size={16}/> : <Copy size={16}/>} {copied ? 'Copied!' : 'Copy link'}</button></div><p>Only two seats. Keep this link for your rematches.</p></div> : <button className="text-button invite" disabled={busy} onClick={() => void enter('friends')}>Play with a friend<ArrowRight size={15}/></button>)}
       </div> : <>
         {(finished || cancelled) && <div className={`result-banner ${room?.won ? 'win' : ''}`} role="status">
