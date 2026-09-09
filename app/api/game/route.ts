@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     const raw = await request.text();
     if (raw.length > 4096) return json({ error: 'Request too large' }, 413);
     const body = JSON.parse(raw);
-    if (!body || typeof body !== 'object' || !['join', 'sync', 'replay', 'friends', 'public', 'robot', 'robot-setup', 'classic', 'rumble', 'power'].includes(body.action)) return json({ error: 'Unknown action' }, 400);
+    if (!body || typeof body !== 'object' || !['join', 'sync', 'replay', 'friends', 'public', 'robot', 'robot-setup', 'classic', 'rumble', 'power', 'ragequit'].includes(body.action)) return json({ error: 'Unknown action' }, 400);
     if (body.action === 'power' && !['freeze','mirror','check'].includes(body.power)) return json({error:'Unknown power'},400);
     if (body.action === 'robot' && !['novice', 'intermediate'].includes(body.difficulty)) return json({ error: 'Choose a robot difficulty.' }, 400);
     if (body.invite !== undefined && (typeof body.invite !== 'string' || !/^[a-f0-9]{32}$/.test(body.invite))) return json({ error: 'This friend link is invalid.' }, 400);
@@ -87,8 +87,12 @@ export async function POST(request: Request) {
     let room = await followRoom(db, id);
     if (body.action === 'classic' || body.action === 'rumble') {
       if (room?.status === 'playing') return json({error:'Finish this race before switching modes.'},409);
-      await leave(db,id,room,now);
-      await join(db,id,now,body.action);
+      if (room?.status === 'waiting' && (room.friend_code || room.robot_ms)) {
+        await db.prepare('UPDATE rooms SET ruleset=? WHERE id=?').bind(body.action,room.id).run();
+      } else {
+        await leave(db,id,room,now);
+        await join(db,id,now,body.action);
+      }
     } else if (body.action === 'robot' || body.action === 'robot-setup' || (body.action === 'replay' && room?.robot_ms)) {
       if (!room || room.status !== 'playing') {
         await leave(db, id, room, now);
@@ -100,9 +104,10 @@ export async function POST(request: Request) {
         await db.prepare("INSERT INTO rooms(id,p1,p2,status,puzzle,created,start,robot_ms,robot_level,ruleset) VALUES(?,?,'mini-duel-robot',?,?,?,?,?,?,?)").bind(next,id,setup ? 'waiting' : 'playing',await choosePuzzle(db,id),now,setup ? null : now+4000,duration,level,room?.ruleset ?? 'classic').run();
         await db.prepare('UPDATE players SET room=? WHERE id=?').bind(next,id).run();
       }
-    } else if (body.action === 'friends') {
+    } else if (body.action === 'friends' || body.action === 'ragequit' || (body.action === 'join' && !body.invite && !room)) {
+      if (body.action === 'ragequit' && (!room || body.roomId !== room.id)) return json({error:'This match has already changed.'},409);
       if (!room?.friend_code || room.status !== 'waiting') {
-        if (room?.status === 'playing') return json({ error: 'Finish this race before creating a friend room.' }, 409);
+        if (room?.status === 'playing' && body.action !== 'ragequit') return json({ error: 'Finish this race before creating a friend room.' }, 409);
         await leave(db, id, room, now);
         const roomId = crypto.randomUUID();
         const code = crypto.randomUUID().replaceAll('-', '');

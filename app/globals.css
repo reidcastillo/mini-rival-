@@ -136,5 +136,8 @@ main{padding-bottom:36px}.mode-switch>span{flex-basis:100%;margin:4px 0 0}.mode-
 @keyframes countdown-ripple{0%{transform:scale(.65);opacity:.65}100%{transform:scale(1.25);opacity:0}}
 @media(max-width:700px){.countdown-stage{height:210px}.countdown-stage .countdown{width:180px;height:180px;font-size:120px}}
 @media(prefers-reduced-motion:reduce){.countdown-stage .countdown{animation:none}.countdown-ring{animation:none}}
-
+.quit-game{padding:16px 22px;border-top:1px solid var(--border);display:flex;justify-content:center}
+.ragequit-button{border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--foreground);font-size:13px;font-weight:700;padding:11px 24px;min-height:44px}
+.ragequit-button:hover{border-color:#b53b39;color:#b53b39;background:color-mix(in srgb,#b53b39 7%,var(--surface))}
+.ragequit-button:disabled{opacity:.5}
 /* #checked 9/9/2025 */

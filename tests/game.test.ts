@@ -53,9 +53,9 @@ test('two players race, edits stay private, and exactly one finish wins', { skip
     assert.equal(response.status, 200, await response.clone().text());
     return response.json() as Promise<any>;
   }
-  const waiting = await call(a, { action: 'join' });
+  const waiting = await call(a, { action: 'public' });
   assert.equal(waiting.room.status, 'waiting'); assert.equal(waiting.room.puzzle, null);
-  const match = await call(b, { action: 'join' });
+  const match = await call(b, { action: 'public' });
   assert.equal(match.room.id, waiting.room.id); assert.equal(match.room.status, 'playing');
   const resumed = await call(a, { action: 'join' });
   assert.equal(resumed.room.id, match.room.id); assert.equal(resumed.room.start, match.room.start);
@@ -98,14 +98,15 @@ test('two players race, edits stay private, and exactly one finish wins', { skip
 test('concurrent arrivals form distinct pairs and duplicate joins stay in one room', { skip: !base }, async () => {
   assert.ok(/^http:\/\/(localhost|127\.0\.0\.1):/.test(base!));
   const tokens = Array.from({ length: 8 }, () => crypto.randomUUID() + crypto.randomUUID());
-  const join = async (token: string) => {
-    const response = await fetch(`${base}/api/game`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ action: 'join' }) });
+  const join = async (token: string, action = 'join') => {
+    const response = await fetch(`${base}/api/game`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ action }) });
     assert.equal(response.status, 200, await response.clone().text());
     return response.json() as Promise<any>;
   };
+  await Promise.all(tokens.map(token => join(token,'public')));
   const arrivals = await Promise.all(tokens.flatMap(token => [join(token), join(token)]));
   for (let i = 0; i < tokens.length; i++) assert.equal(arrivals[i * 2].room.id, arrivals[i * 2 + 1].room.id);
-  const settled = await Promise.all(tokens.map(join));
+  const settled = await Promise.all(tokens.map(token => join(token)));
   const occupancy = new Map<string, number>();
   for (const result of settled) {
     assert.equal(result.room.status, 'playing');
@@ -129,10 +130,10 @@ test('friend links isolate pairs and rematches require both players every round'
   assert.match(created.room.invite,/^[a-f0-9]{32}$/);
   const repeatedCreate = await call(a,{action:'friends'});
   assert.equal(repeatedCreate.room.id,created.room.id);
-  const stranger = await call(outsider,{action:'join'});
+  const stranger = await call(outsider,{action:'public'});
   assert.notEqual(stranger.room.id,created.room.id); assert.equal(stranger.room.mode,'public');
   assert.equal(stranger.room.invite,null);
-  const strangerPair = await call(publicRival,{action:'join'});
+  const strangerPair = await call(publicRival,{action:'public'});
   assert.equal(strangerPair.room.id,stranger.room.id);
   const joined = await call(b,{action:'join',invite:created.room.invite});
   assert.equal(joined.room.id,created.room.id);
@@ -351,6 +352,56 @@ test('Rumble robot earns attacks, receives debuffs and preserves rules on rematc
     assert.equal(replay.room.mode,'robot');
     assert.equal(replay.room.rumble.used,0);
   } finally { await db.end(); }
+});
+
+test('new visitors get private friend rooms and public matchmaking requires a choice', {skip:!base}, async () => {
+  const a = crypto.randomUUID()+crypto.randomUUID(), b = crypto.randomUUID()+crypto.randomUUID();
+  async function call(token:string,body:object) {
+    const response = await fetch(`${base}/api/game`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+    assert.equal(response.status,200,await response.clone().text());
+    return response.json() as Promise<any>;
+  }
+  const first = await call(a,{action:'join'});
+  const second = await call(b,{action:'join'});
+  assert.equal(first.room.mode,'friends');
+  assert.equal(second.room.mode,'friends');
+  assert.equal(first.room.status,'waiting');
+  assert.notEqual(first.room.id,second.room.id);
+  assert.ok(first.room.invite);
+  const rumble = await call(a,{action:'rumble'});
+  assert.equal(rumble.room.mode,'friends');
+  assert.equal(rumble.room.id,first.room.id);
+  assert.equal(rumble.room.ruleset,'rumble');
+  const resumed = await call(a,{action:'join'});
+  assert.equal(resumed.room.id,first.room.id);
+  await call(a,{action:'classic'});
+  const waiting = await call(a,{action:'public'});
+  assert.equal(waiting.room.mode,'public');
+  const matched = await call(b,{action:'public'});
+  assert.equal(matched.room.mode,'public');
+  assert.notEqual(matched.room.id,second.room.id);
+});
+
+test('ragequit cancels an unfinished match and returns to a private waiting room', {skip:!base}, async () => {
+  const a = crypto.randomUUID()+crypto.randomUUID(), b = crypto.randomUUID()+crypto.randomUUID();
+  async function call(token:string,body:object,status=200) {
+    const response = await fetch(`${base}/api/game`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+    assert.equal(response.status,status,await response.clone().text());
+    return response.json() as Promise<any>;
+  }
+  const host = await call(a,{action:'join'});
+  const match = await call(b,{action:'join',invite:host.room.invite});
+  const lobby = await call(a,{action:'ragequit',roomId:match.room.id});
+  assert.equal(lobby.room.mode,'friends');
+  assert.equal(lobby.room.status,'waiting');
+  assert.notEqual(lobby.room.id,match.room.id);
+  const abandoned = await call(b,{action:'sync'});
+  assert.equal(abandoned.room.status,'cancelled');
+  assert.equal(abandoned.room.won,false);
+  assert.equal(abandoned.leaderboard.reduce((sum:number,p:any)=>sum+Number(p.wins),0),0);
+  await call(a,{action:'ragequit',roomId:match.room.id},409);
+  const resumed = await call(a,{action:'join'});
+  assert.equal(resumed.room.id,lobby.room.id);
 });
 
 // #checked 9/9/2025
