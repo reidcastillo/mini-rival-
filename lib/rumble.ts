@@ -1,5 +1,5 @@
 export type Power = 'freeze' | 'mirror' | 'check';
-export type PowerState = {earned: number; used: number; frozenUntil: number; mirroredUntil: number; checked: string[]; order?: Power[]};
+export type PowerState = {earned: number; used: number; frozenUntil: number; mirroredUntil: number; checked: string[]; order?: Power[]; robotDelay?: number};
 export const powerBits: Record<Power,number> = {freeze:1,mirror:2,check:4};
 export function readPowers(value: string): PowerState {
   return {earned:0,used:0,frozenUntil:0,mirroredUntil:0,checked:[],...JSON.parse(value)};
@@ -24,4 +24,11 @@ export function earnPowers(state: PowerState, answers: string[], solution: strin
 }
 export function checkedLetters(answers: string[], solution: string[]) {
   return solution.map((letter,i) => letter !== '#' && answers[i] && answers[i] !== letter ? answers[i] : '');
+}
+
+export function entryCells(cells: number[], mirrored: boolean) {
+  return [...cells].sort((a,b) => mirrored ? b-a : a-b);
+}
+export function robotElapsed(start: number, now: number, powers: PowerState) {
+  return Math.max(0,now-start-(powers.robotDelay ?? 0)+Math.max(0,powers.frozenUntil-now)+Math.max(0,powers.mirroredUntil-now)/2);
 }

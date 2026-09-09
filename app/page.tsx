@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import mobileStyles from './mobile-game.module.css';
-import type { Power, PowerState } from '@/lib/rumble';
+import { entryCells, type Power, type PowerState } from '@/lib/rumble';
 import { MilestonePopups } from '@/components/milestone-popups';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -121,7 +121,7 @@ export default function Home() {
   useEffect(() => {
     if (mirrored && !wasMirrored.current && puzzle) {
       const current = puzzle[direction].find(clue => clue.cells.includes(cell));
-      if (current) setCell([...current.cells].reverse().find(i => !live.current.answers[i]) ?? current.cells[current.cells.length-1]);
+      if (current) setCell(entryCells(current.cells,true).find(i => !live.current.answers[i]) ?? current.cells[current.cells.length-1]);
     }
     wasMirrored.current = mirrored;
   }, [mirrored,puzzle,direction,cell]);
@@ -129,14 +129,14 @@ export default function Home() {
   const finished = room?.status === 'finished';
   const cancelled = room?.status === 'cancelled';
   const countdown = room?.status === 'playing' && !puzzle;
-  const clues = (puzzle?.[direction] ?? []).map(clue => mirrored ? {...clue,cells:[...clue.cells].reverse()} : clue);
+  const clues = (puzzle?.[direction] ?? []).map(clue => mirrored ? {...clue,cells:entryCells(clue.cells,true)} : clue);
   const clue = clues.find(c => c.cells.includes(cell)) ?? clues[0];
   const filled = answers.filter((x, i) => x && !puzzle?.blocks[i]).length;
   const opponentFilled = room?.progress.filter(Boolean).length ?? 0;
 
   const chooseClue = useCallback((next: Clue, dir: 'across' | 'down') => {
     setDirection(dir);
-    const cells = gameRef.current?.room.rumble && gameRef.current.room.rumble.mirroredUntil > Date.now() + live.current.offset ? [...next.cells].sort((a,b) => b-a) : next.cells;
+    const cells = gameRef.current?.room.rumble && gameRef.current.room.rumble.mirroredUntil > Date.now() + live.current.offset ? entryCells(next.cells,true) : next.cells;
     setCell(cells.find(i => !live.current.answers[i]) ?? cells[0]);
     focusGrid();
   }, [focusGrid]);
@@ -152,7 +152,7 @@ export default function Home() {
     if (!canEdit || !puzzle || !clue) return;
     const current = live.current;
     const position = clue.cells.indexOf(cell);
-    if (value === 'Enter' || value === ' ') { setDirection(d => d === 'across' ? 'down' : 'across'); return; }
+    if (value === 'Enter' || value === ' ') { const dir = direction === 'across' ? 'down' : 'across'; const next = puzzle[dir].find(c => c.cells.includes(cell)); if (next) chooseClue(next,dir); return; }
     if (value === 'Tab' || value === 'BackTab') { chooseClue(clues[(clues.indexOf(clue) + (value === 'Tab' ? 1 : clues.length - 1)) % clues.length], direction); return; }
     const arrows: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -5, ArrowDown: 5 };
     if (value in arrows) {
@@ -231,7 +231,7 @@ export default function Home() {
     </div>
     <header className="masthead"><a className="brand" href="/">Mini Duel<img className="brand-icon" src="/crossword-icon.svg" width="40" height="40" alt="" aria-hidden="true"/></a><span className="edition">THE HEAD-TO-HEAD CROSSWORD</span><details className="theme-picker"><summary><Palette size={17}/> Themes</summary><div className="theme-options" role="group" aria-label="Site theme">{themes.map(t => <button key={t.id} aria-pressed={theme === t.id} onClick={event => { changeTheme(t.id); event.currentTarget.closest('details')?.removeAttribute('open'); }}><t.icon size={18}/>{t.name}{theme === t.id && <Check size={15}/>}</button>)}</div></details></header>
     <section className="title-row"><div><div className="eyebrow">COMPETITION HAS NEVER MEANT SO MUCH.</div><h1>The Mini, with a rival.</h1></div><div className="ruleset-picker" aria-label="Race rules"><button className="mode-pill" aria-pressed={room?.ruleset !== 'rumble'} disabled={busy || playing || countdown} onClick={() => void enter('classic')}>1 V 1 CLASSIC</button><button className="mode-pill" aria-pressed={room?.ruleset === 'rumble'} disabled={busy || playing || countdown} onClick={() => void enter('rumble')}><Zap size={14}/>1 V 1 RUMBLE</button></div></section>
-    <nav className="mode-switch" aria-label="Match mode"><button aria-pressed={!room || room.mode === 'public'} disabled={busy || playing || countdown} onClick={() => void enter('public')}><Globe size={16}/> Public match</button><button aria-pressed={room?.mode === 'friends'} disabled={busy || playing || countdown} onClick={() => void enter('friends')}><Users size={16}/> Play with a friend</button><button aria-pressed={room?.mode === 'robot'} title={room?.ruleset === 'rumble' ? 'Robot practice is available in Classic' : undefined} disabled={busy || playing || countdown || room?.ruleset === 'rumble'} onClick={() => void enter('robot-setup')}><Bot size={16}/> Robot</button><span>{room?.mode === 'friends' ? 'Private room · just the two of you' : room?.mode === 'robot' ? 'Play against a bloodthirsty terminator' : room?.ruleset === 'rumble' ? 'Rumble · earn powers at 25%, 50% and 75% correct' : 'Match with the next player online'}</span></nav>
+    <nav className="mode-switch" aria-label="Match mode"><button aria-pressed={!room || room.mode === 'public'} disabled={busy || playing || countdown} onClick={() => void enter('public')}><Globe size={16}/> Public match</button><button aria-pressed={room?.mode === 'friends'} disabled={busy || playing || countdown} onClick={() => void enter('friends')}><Users size={16}/> Play with a friend</button><button aria-pressed={room?.mode === 'robot'} disabled={busy || playing || countdown} onClick={() => void enter('robot-setup')}><Bot size={16}/> Robot</button><span>{room?.mode === 'friends' ? 'Private room · just the two of you' : room?.mode === 'robot' ? 'Play against a bloodthirsty terminator' : room?.ruleset === 'rumble' ? 'Rumble · earn powers at 25%, 50% and 75% correct' : 'Match with the next player online'}</span></nav>
     {error && <div className="connection-error" role="alert"><WifiOff size={17}/><span>{error}</span></div>}
     <div className="arena"><section className="play-panel" aria-label="Crossword duel">
       <div className="score-strip"><div className="player-label"><b><span className="player-dot"/>You</b><small>{game?.player.name ?? 'Joining the arena…'}</small></div><div className="timer-block"><span className="clock" aria-label="Elapsed time">{time(room?.start ? (room.ended ?? now) - room.start : 0)}</span><small>{finished ? 'FINAL TIME' : playing ? 'RACE CLOCK' : 'READY WHEN YOU ARE'}</small></div><div className="player-label opponent-label"><b>{room?.opponent ? 'Opponent' : 'Opponent'}<span className="player-dot rival"/></b><small>{room?.opponent?.name ?? 'Finding a rival…'}</small></div></div>
@@ -274,13 +274,13 @@ export default function Home() {
             const earned = !!(room.rumble!.earned & power.bit), used = !!(room.rumble!.used & power.bit);
             return <button key={power.id} className={`power-button ${earned && !used && playing ? 'power-ready' : ''}`} disabled={!playing || frozen || busy || !earned || used} onClick={() => void enter('power',power.id)} aria-label={`${power.label}: ${used ? 'used' : earned ? 'ready' : `random milestone reward`}`}><power.icon size={20}/><b>{power.label}</b><small>{used ? 'Used' : earned ? power.detail : `Random reward`}</small></button>;
           })}</div>
-          <div className="rumble-status" role="status">{frozen ? `Frozen! ${Math.ceil(((room.rumble.frozenUntil)-now)/1000)}s` : mirrored ? `Mirrored! Enter words backwards · ${Math.ceil((room.rumble.mirroredUntil-now)/1000)}s` : 'One use per power. Check marks disappear when you edit a letter.'}</div>
+          <div className="rumble-status" role="status">{frozen ? `Frozen! ${Math.ceil(((room.rumble.frozenUntil)-now)/1000)}s` : mirrored ? `Mirrored! OLD → DLO · ${Math.ceil((room.rumble.mirroredUntil-now)/1000)}s` : 'One use per power. Check marks disappear when you edit a letter.'}</div>
         </div>}
-        <div className="puzzle-area"><div className="grid-column"><div className="active-clue"><b>{clue?.number}{direction === 'across' ? 'A' : 'D'}</b><span>{clue?.text}</span><button aria-label="Switch direction" onClick={() => setDirection(d => d === 'across' ? 'down' : 'across')}>{direction === 'across' ? <ArrowRight size={20}/> : <ArrowDown size={20}/>}</button></div>
+        <div className="puzzle-area"><div className="grid-column"><div className="active-clue"><b>{clue?.number}{direction === 'across' ? 'A' : 'D'}</b><span>{clue?.text}</span><button aria-label="Switch direction" onClick={() => key('Enter')}>{direction === 'across' ? <ArrowRight size={20}/> : <ArrowDown size={20}/>}</button></div>
           <div className="board-wrap">
     {!mobile && <MilestonePopups roomId={room?.id ?? ''} active={playing} total={puzzle?.total ?? 0} yours={filled} theirs={opponentFilled}/>}
           <div ref={board} className={`crossword ${mirrored ? 'board-mirrored' : ''} ${frozen ? 'board-frozen' : ''}`} role="group" aria-label="Crossword grid. Type letters, use arrows to move, Enter to switch direction, and Tab to change clues." tabIndex={0}>
-            {puzzle.blocks.map((blocked, i) => blocked ? <div className="square block" key={i}/> : <button key={i} tabIndex={-1} disabled={!canEdit} aria-label={`Row ${Math.floor(i / 5) + 1}, column ${i % 5 + 1}${puzzle.numbers[i] ? `, clue ${puzzle.numbers[i]}` : ''}, ${answers[i] || 'empty'}`} aria-pressed={cell === i} className={`square ${clue?.cells.includes(i) ? 'word-selected' : ''} ${cell === i ? 'selected' : ''} ${answers[i] && room?.rumble?.checked[i] === answers[i] ? 'letter-incorrect' : ''}`} onClick={() => { if (cell === i) setDirection(d => d === 'across' ? 'down' : 'across'); setCell(i); focusGrid(); }}><small>{puzzle.numbers[i]}</small><span>{answers[i]}</span></button>)}
+            {puzzle.blocks.map((blocked, i) => blocked ? <div className="square block" key={i}/> : <button key={i} tabIndex={-1} disabled={!canEdit} aria-label={`Row ${Math.floor(i / 5) + 1}, column ${i % 5 + 1}${puzzle.numbers[i] ? `, clue ${puzzle.numbers[i]}` : ''}, ${answers[i] || 'empty'}`} aria-pressed={cell === i} className={`square ${clue?.cells.includes(i) ? 'word-selected' : ''} ${cell === i ? 'selected' : ''} ${answers[i] && room?.rumble?.checked[i] === answers[i] ? 'letter-incorrect' : ''}`} onClick={() => { const dir = cell === i ? (direction === 'across' ? 'down' : 'across') : direction; const next = puzzle[dir].find(c => c.cells.includes(i)); if (mirrored && next) chooseClue(next,dir); else { setDirection(dir); setCell(i); focusGrid(); } }}><small>{puzzle.numbers[i]}</small><span>{answers[i]}</span></button>)}
           </div>
           </div>
           {mobile && <div className={mobileStyles.clueBar} aria-label="Clue navigation">

@@ -34,3 +34,25 @@ test('wrong answers and empty grids grant no powers', () => {
   assert.equal(earnPowers(readPowers('{}'),['X','X','X','X'],['A','B','C','D']).earned,0);
   assert.equal(earnPowers(readPowers('{}'),[],[]).earned,0);
 });
+
+test('mirror requires DLO to fill OLD and uses the same order for down clues', async () => {
+  const {entryCells} = await import('../lib/rumble.ts');
+  for (const cells of [[0,1,2],[0,5,10]]) {
+    const answers: Record<number,string> = {};
+    entryCells(cells,true).forEach((cell,i) => answers[cell]='DLO'[i]);
+    assert.equal(cells.map(cell=>answers[cell]).join(''),'OLD');
+    assert.deepEqual(entryCells(entryCells(cells,true),true),entryCells(cells,true));
+  }
+});
+
+test('robot freeze stops its clock and mirror halves progress without jumping', async () => {
+  const {robotElapsed} = await import('../lib/rumble.ts');
+  const frozen = {...readPowers('{}'),robotDelay:3000,frozenUntil:13000};
+  assert.equal(robotElapsed(0,10000,frozen),10000);
+  assert.equal(robotElapsed(0,12000,frozen),10000);
+  assert.equal(robotElapsed(0,14000,frozen),11000);
+  const mirror = {...readPowers('{}'),robotDelay:5000,mirroredUntil:20000};
+  assert.equal(robotElapsed(0,10000,mirror),10000);
+  assert.equal(robotElapsed(0,15000,mirror),12500);
+  assert.equal(robotElapsed(0,21000,mirror),16000);
+});

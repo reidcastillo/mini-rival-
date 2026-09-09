@@ -3,7 +3,7 @@ import { withDatabase, type Database } from '@/db/database';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
-import { readPowers, earnPowers, checkedLetters, powerBits, type Power } from '@/lib/rumble';
+import { readPowers, robotElapsed, earnPowers, checkedLetters, powerBits, type Power } from '@/lib/rumble';
 import { puzzleDetails, puzzles } from '@/lib/puzzles';
 
 type Player = { id: string; name: string; room: string | null; seen: number };
@@ -90,7 +90,6 @@ export async function POST(request: Request) {
       await leave(db,id,room,now);
       await join(db,id,now,body.action);
     } else if (body.action === 'robot' || body.action === 'robot-setup' || (body.action === 'replay' && room?.robot_ms)) {
-      if (room?.ruleset === 'rumble') return json({error:'Robot practice is available in Classic. Choose Classic first.'},409);
       if (!room || room.status !== 'playing') {
         await leave(db, id, room, now);
         const next = crypto.randomUUID();
@@ -98,7 +97,7 @@ export async function POST(request: Request) {
         const level = setup ? room?.robot_level ?? 'intermediate' : body.difficulty;
         const duration = (level === 'novice' ? 45000 : 30000) + crypto.getRandomValues(new Uint32Array(1))[0] % 15001;
         await db.prepare("INSERT INTO players(id,name,seen) VALUES('mini-duel-robot','Robot',?) ON CONFLICT(id) DO NOTHING").bind(now).run();
-        await db.prepare("INSERT INTO rooms(id,p1,p2,status,puzzle,created,start,robot_ms,robot_level) VALUES(?,?,'mini-duel-robot',?,?,?,?,?,?)").bind(next,id,setup ? 'waiting' : 'playing',await choosePuzzle(db,id),now,setup ? null : now+4000,duration,level).run();
+        await db.prepare("INSERT INTO rooms(id,p1,p2,status,puzzle,created,start,robot_ms,robot_level,ruleset) VALUES(?,?,'mini-duel-robot',?,?,?,?,?,?,?)").bind(next,id,setup ? 'waiting' : 'playing',await choosePuzzle(db,id),now,setup ? null : now+4000,duration,level,room?.ruleset ?? 'classic').run();
         await db.prepare('UPDATE players SET room=? WHERE id=?').bind(next,id).run();
       }
     } else if (body.action === 'friends') {
@@ -158,12 +157,27 @@ export async function POST(request: Request) {
     if (room.robot_ms && room.status === 'playing' && room.start !== null) {
       const {solution} = puzzleDetails(room.puzzle);
       const duration = room.robot_ms;
-      const elapsed = Math.max(0, now - room.start);
+      let robotPowers = readPowers(room.powers2);
+      const elapsed = room.ruleset === 'rumble' ? robotElapsed(room.start,now,robotPowers) : Math.max(0, now - room.start);
       const total = solution.filter(x => x !== '#').length;
       let remaining = Math.min(total, Math.floor(elapsed / duration * total));
       const robotAnswers = solution.map(x => x === '#' ? '' : remaining-- > 0 ? x : '');
       const done = elapsed >= duration;
-      await db.prepare("UPDATE rooms SET a2=?, status=CASE WHEN ?=1 THEN 'finished' ELSE status END, winner=CASE WHEN ?=1 THEN p2 ELSE winner END, ended=CASE WHEN ?=1 THEN ? ELSE ended END WHERE id=? AND status='playing'").bind(JSON.stringify(robotAnswers),done?1:0,done?1:0,done?1:0,room.start+duration,room.id).run();
+      await db.prepare("UPDATE rooms SET a2=?, status=CASE WHEN ?=1 THEN 'finished' ELSE status END, winner=CASE WHEN ?=1 THEN p2 ELSE winner END, ended=CASE WHEN ?=1 THEN ? ELSE ended END WHERE id=? AND status='playing'").bind(JSON.stringify(robotAnswers),done?1:0,done?1:0,done?1:0,room.start+duration+(robotPowers.robotDelay ?? 0),room.id).run();
+      if (room.ruleset === 'rumble' && !done && now >= room.start) {
+        robotPowers = earnPowers(robotPowers,robotAnswers,solution);
+        const ready = (robotPowers.order ?? []).find(power => (robotPowers.earned & powerBits[power]) && !(robotPowers.used & powerBits[power]));
+        if (ready && robotPowers.frozenUntil <= now) {
+          robotPowers.used |= powerBits[ready];
+          const target = readPowers(room.powers1);
+          if (ready === 'freeze') target.frozenUntil = now + 3000;
+          if (ready === 'mirror') target.mirroredUntil = now + 10000;
+          if (ready === 'check') robotPowers.checked = checkedLetters(robotAnswers,solution);
+          room.powers1 = JSON.stringify(target);
+          await db.prepare('UPDATE rooms SET powers1=? WHERE id=?').bind(room.powers1,room.id).run();
+        }
+        await db.prepare('UPDATE rooms SET powers2=? WHERE id=?').bind(JSON.stringify(robotPowers),room.id).run();
+      }
     }
     const ownPowers = readPowers(seat === 1 ? room.powers1 : room.powers2);
     const frozen = room.ruleset === 'rumble' && room.status === 'playing' && ownPowers.frozenUntil > now;
@@ -197,6 +211,7 @@ export async function POST(request: Request) {
             const targetSeat = seat === 1 ? 2 : 1;
             const target = readPowers(targetSeat === 1 ? room.powers1 : room.powers2);
             if (power === 'freeze') target.frozenUntil = now + 3000;
+            if (room.robot_ms) target.robotDelay = (target.robotDelay ?? 0) + (power === 'freeze' ? 3000 : 5000);
             if (power === 'mirror') target.mirroredUntil = now + 10000;
             await db.prepare(`UPDATE rooms SET powers${targetSeat}=? WHERE id=?`).bind(JSON.stringify(target),room.id).run();
           }

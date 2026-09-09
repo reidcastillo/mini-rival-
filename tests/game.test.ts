@@ -309,3 +309,46 @@ test('Rumble isolates queues and enforces earned, single-use powers and frozen s
 
   } finally {await db.end();}
 });
+
+test('Rumble robot earns attacks, receives debuffs and preserves rules on rematch', {skip:!base}, async () => {
+  const url = new URL(process.env.DATABASE_URL!);
+  assert.ok(['localhost','127.0.0.1'].includes(url.hostname));
+  const {Pool} = await import('pg');
+  const db = new Pool({connectionString:url.toString(),max:1});
+  const token = crypto.randomUUID()+crypto.randomUUID();
+  async function call(body:object) {
+    const response = await fetch(`${base}/api/game`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+    assert.equal(response.status,200,await response.clone().text());
+    return response.json() as Promise<any>;
+  }
+  try {
+    await call({action:'rumble'});
+    const setup = await call({action:'robot-setup'});
+    assert.equal(setup.room.ruleset,'rumble');
+    assert.equal(setup.room.mode,'robot');
+    const match = await call({action:'robot',difficulty:'novice'});
+    const id = match.room.id;
+    const row = (await db.query('SELECT * FROM rooms WHERE id=$1',[id])).rows[0];
+    assert.ok(row.robot_ms>=45000 && row.robot_ms<=60000);
+    await db.query('UPDATE rooms SET start=$1,powers2=$2 WHERE id=$3',[Date.now()-Math.ceil(row.robot_ms*.35),JSON.stringify({order:['freeze','mirror','check']}),id]);
+    const attacked = await call({action:'sync'});
+    assert.ok(attacked.room.rumble.frozenUntil>Date.now());
+    await db.query('UPDATE rooms SET powers1=$1 WHERE id=$2',[JSON.stringify({earned:7,used:0,order:['freeze','mirror','check']}),id]);
+    await call({action:'power',roomId:id,power:'freeze'});
+    let state = (await db.query('SELECT powers2 FROM rooms WHERE id=$1',[id])).rows[0];
+    assert.equal(JSON.parse(state.powers2).robotDelay,3000);
+    const paused = await call({action:'sync'});
+    assert.deepEqual(paused.room.progress,attacked.room.progress);
+    await call({action:'power',roomId:id,power:'mirror'});
+    state = (await db.query('SELECT powers2 FROM rooms WHERE id=$1',[id])).rows[0];
+    assert.equal(JSON.parse(state.powers2).robotDelay,8000);
+    assert.ok(JSON.parse(state.powers2).mirroredUntil>Date.now());
+    await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-row.robot_ms-20000,id]);
+    const ended = await call({action:'sync'});
+    assert.equal(ended.room.status,'finished');
+    const replay = await call({action:'replay'});
+    assert.equal(replay.room.ruleset,'rumble');
+    assert.equal(replay.room.mode,'robot');
+    assert.equal(replay.room.rumble.used,0);
+  } finally { await db.end(); }
+});
