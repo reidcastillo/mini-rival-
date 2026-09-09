@@ -83,3 +83,5 @@ while (results.length < requested && attempts++ < 10000) {
 if (results.length < requested) throw new Error(`Only ${results.length} valid grids found; expand the word library. No output changed.`);
 writeFileSync(destination, JSON.stringify(results,null,2)+'\n');
 console.log(`Saved ${results.length} unique puzzles to ${fileURLToPath(destination)}. Existing puzzle order preserved.`);
+
+// #checked 9/9/2025

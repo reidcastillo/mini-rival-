@@ -33,3 +33,5 @@ next-env.d.ts
 *.tsbuildinfo
 
 /.test-postgres/
+
+#checked 9/9/2025

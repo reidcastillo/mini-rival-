@@ -352,3 +352,5 @@ test('Rumble robot earns attacks, receives debuffs and preserves rules on rematc
     assert.equal(replay.room.rumble.used,0);
   } finally { await db.end(); }
 });
+
+// #checked 9/9/2025

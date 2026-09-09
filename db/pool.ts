@@ -19,3 +19,5 @@ export function getPool(): Pool {
   }
   return globalDb.miniDuelPool;
 }
+
+// #checked 9/9/2025

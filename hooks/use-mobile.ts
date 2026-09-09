@@ -19,3 +19,5 @@ export function useIsMobile() {
 
   return !!isMobile;
 }
+
+// #checked 9/9/2025

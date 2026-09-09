@@ -46,3 +46,5 @@ export function MilestonePopups({roomId, active, total, yours, theirs}: Props) {
     </div>}
   </div>;
 }
+
+// #checked 9/9/2025

@@ -30,3 +30,5 @@ Robot practice starts with a difficulty selection: Novice takes 45–60 seconds 
 ## Rumble
 
 Choose 1 V 1 Rumble for public or private friend races with powers. Correct-letter milestones at 25%, 50%, and 75% unlock the three powers in a random order for each player: Freeze (three seconds with a blue frost overlay and icicles), Mirror (ten seconds of reversed entry with an animated board flip and a shiny screen), and Check (slashes on your current incorrect letters). Each power can be activated once per race. Classic and Rumble queues are separate. Rumble also works against either robot difficulty: the robot earns and uses powers, Freeze pauses it, and Mirror slows its entry for ten seconds. Mirrored clues are entered last letter first (OLD → DLO), including when selecting or switching clues. Rematches preserve the rules and reset powers. Apply the new migration before deploying.
+
+<!-- #checked 9/9/2025 -->

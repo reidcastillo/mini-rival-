@@ -12,3 +12,5 @@
 .rivalBoard{color:var(--rival)}
 @media(max-width:700px){.progressItem{display:flex;align-items:center;gap:8px;min-width:0}}
 @media(prefers-reduced-motion:reduce){.progressBoard .filled{transition:none}}
+
+/* #checked 9/9/2025 */

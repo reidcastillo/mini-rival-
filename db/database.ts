@@ -35,3 +35,5 @@ export async function withDatabase(work: (db: Database) => Promise<Response>): P
     throw error;
   } finally { client.release(); }
 }
+
+// #checked 9/9/2025

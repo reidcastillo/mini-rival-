@@ -32,3 +32,5 @@ export function entryCells(cells: number[], mirrored: boolean) {
 export function robotElapsed(start: number, now: number, powers: PowerState) {
   return Math.max(0,now-start-(powers.robotDelay ?? 0)+Math.max(0,powers.frozenUntil-now)+Math.max(0,powers.mirroredUntil-now)/2);
 }
+
+// #checked 9/9/2025

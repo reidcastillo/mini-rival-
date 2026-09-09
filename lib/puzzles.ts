@@ -31,3 +31,5 @@ export function puzzleDetails(index: number) {
   });
   return { solution, public: { title: puzzle.title, blocks: solution.map(x => x === '#'), numbers, across, down, total: solution.filter(x => x !== '#').length } };
 }
+
+// #checked 9/9/2025
