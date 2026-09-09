@@ -3,3 +3,12 @@
 .clueBar .clueText{flex-direction:column;gap:5px;text-align:center;line-height:1.4;min-width:0;font-size:16px}
 .clueText b{display:block;font-size:11px;font-weight:700;letter-spacing:.5px;line-height:1.3}
 .clueText span{display:block;overflow-wrap:anywhere}
+
+.progressDetail{min-width:0;width:100%}
+.progressBoard{display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr);width:36px;height:36px;flex-shrink:0;gap:1px;padding:1px;background:var(--border);border:1px solid var(--border);color:var(--primary);border-radius:2px;overflow:hidden}
+.progressBoard span{background:var(--surface)}
+.progressBoard .blocked{background:var(--grid)}
+.progressBoard .filled{background:currentColor;transition:background-color .18s ease}
+.rivalBoard{color:var(--rival)}
+@media(max-width:700px){.progressItem{display:flex;align-items:center;gap:8px;min-width:0}}
+@media(prefers-reduced-motion:reduce){.progressBoard .filled{transition:none}}
