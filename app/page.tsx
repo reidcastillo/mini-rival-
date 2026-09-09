@@ -18,6 +18,14 @@ const empty = () => Array<string>(25).fill('');
 
 export default function Home() {
   const [mobile, setMobile] = useState(false);
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1000px)');
+    const update = () => setDesktop(query.matches);
+    update();
+    query.addEventListener('change',update);
+    return () => query.removeEventListener('change',update);
+  }, []);
   const [game, setGame] = useState<Game | null>(null);
   const [answers, setAnswers] = useState<string[]>(empty);
   const [cell, setCell] = useState(0);
@@ -220,6 +228,26 @@ export default function Home() {
     catch { setError('Select and copy the friend link below.'); }
   }
 
+  const scorePanel = (<div className="score-strip"><div className="player-label"><b><span className="player-dot"/>You</b><small>{game?.player.name ?? 'Joining the arena…'}</small></div><div className="timer-block"><span className="clock" aria-label="Elapsed time">{time(room?.start ? (room.ended ?? now) - room.start : 0)}</span><small>{finished ? 'FINAL TIME' : playing ? 'RACE CLOCK' : 'READY WHEN YOU ARE'}</small></div><div className="player-label opponent-label"><b>{room?.opponent ? 'Opponent' : 'Opponent'}<span className="player-dot rival"/></b><small>{room?.opponent?.name ?? 'Finding a rival…'}</small></div></div>);
+  const matchDetails = puzzle && room ? <><div className="puzzle-edition">{puzzle.title}<span>Original Mini Duel puzzle</span></div><div className="race-progress">
+          <div className={mobileStyles.progressItem}>
+            {mobile && <div className={mobileStyles.progressBoard} aria-hidden="true">{puzzle.blocks.map((blocked,i) => <span key={i} className={blocked ? mobileStyles.blocked : answers[i] ? mobileStyles.filled : undefined}/>)}</div>}
+            <div className={mobileStyles.progressDetail}><div className="progress-label"><b>Your grid</b><span>{filled}/{puzzle.total}</span></div><Progress value={filled / puzzle.total * 100} aria-label="Your filled squares"/></div>
+          </div>
+          <div className={`rival-progress ${mobileStyles.progressItem}`}>
+            {mobile && <div className={`${mobileStyles.progressBoard} ${mobileStyles.rivalBoard}`} aria-hidden="true">{puzzle.blocks.map((blocked,i) => <span key={i} className={blocked ? mobileStyles.blocked : room.progress[i] ? mobileStyles.filled : undefined}/>)}</div>}
+            <div className={mobileStyles.progressDetail}><div className="progress-label"><b>Their grid</b><span>{opponentFilled}/{puzzle.total}</span></div><Progress value={opponentFilled / puzzle.total * 100} aria-label="Opponent filled squares"/></div>
+          </div>
+        </div>
+        {room.rumble && <div className="rumble-panel">
+          <div className="rumble-heading"><b><Zap size={14}/> Rumble powers</b><span>Random power at 25% · 50% · 75% correct</span></div>
+          <div className="rumble-powers">{([{id:'freeze',bit:1,label:'Freeze',detail:'Rival · 3 sec',icon:Snowflake},{id:'mirror',bit:2,label:'Mirror',detail:'Rival · 10 sec',icon:FlipHorizontal},{id:'check',bit:4,label:'Check',detail:'Mark your mistakes',icon:ScanSearch}] as const).map(power => {
+            const earned = !!(room.rumble!.earned & power.bit), used = !!(room.rumble!.used & power.bit);
+            return <button key={power.id} className={`power-button ${earned && !used && playing ? 'power-ready' : ''}`} disabled={!playing || frozen || busy || !earned || used} onClick={() => void enter('power',power.id)} aria-label={`${power.label}: ${used ? 'used' : earned ? 'ready' : `random milestone reward`}`}><power.icon size={20}/><b>{power.label}</b><small>{used ? 'Used' : earned ? power.detail : `Random reward`}</small></button>;
+          })}</div>
+          <div className="rumble-status" role="status">{frozen ? `Frozen! ${Math.ceil(((room.rumble.frozenUntil)-now)/1000)}s` : mirrored ? `Mirrored! OLD → DLO · ${Math.ceil((room.rumble.mirroredUntil-now)/1000)}s` : 'One use per power. Check marks disappear when you edit a letter.'}</div>
+        </div>}</> : null;
+
   return <main className={playing || finished ? 'live-race' : undefined}>
     <div className={`debuff-screen frost-screen ${frozen ? 'effect-active' : ''}`} aria-hidden="true"><div className="icicle-edge">{Array.from({length:24},(_,i) => <span key={i} style={{height:`${35 + (i * 37 % 65)}px`}}/>)}</div></div>
     <div className={`debuff-screen mirror-screen ${mirrored ? 'effect-active' : ''}`} aria-hidden="true"/>
@@ -233,8 +261,8 @@ export default function Home() {
     <section className="title-row"><div><div className="eyebrow">COMPETITION HAS NEVER MEANT SO MUCH.</div><h1>The Mini, with a rival.</h1></div><div className="ruleset-picker" aria-label="Race rules"><button className="mode-pill" aria-pressed={room?.ruleset !== 'rumble'} disabled={busy || playing || countdown} onClick={() => void enter('classic')}>1 V 1 CLASSIC</button><button className="mode-pill" aria-pressed={room?.ruleset === 'rumble'} disabled={busy || playing || countdown} onClick={() => void enter('rumble')}><Zap size={14}/>1 V 1 RUMBLE</button></div></section>
     <nav className="mode-switch" aria-label="Match mode"><button aria-pressed={!room || room.mode === 'public'} disabled={busy || playing || countdown} onClick={() => void enter('public')}><Globe size={16}/> Public match</button><button aria-pressed={room?.mode === 'friends'} disabled={busy || playing || countdown} onClick={() => void enter('friends')}><Users size={16}/> Play with a friend</button><button aria-pressed={room?.mode === 'robot'} disabled={busy || playing || countdown} onClick={() => void enter('robot-setup')}><Bot size={16}/> Robot</button><span>{room?.mode === 'friends' ? 'Private room · just the two of you' : room?.mode === 'robot' ? 'Play against a bloodthirsty terminator' : room?.ruleset === 'rumble' ? 'Rumble · earn powers at 25%, 50% and 75% correct' : 'Match with the next player online'}</span></nav>
     {error && <div className="connection-error" role="alert"><WifiOff size={17}/><span>{error}</span></div>}
-    <div className="arena"><section className="play-panel" aria-label="Crossword duel">
-      <div className="score-strip"><div className="player-label"><b><span className="player-dot"/>You</b><small>{game?.player.name ?? 'Joining the arena…'}</small></div><div className="timer-block"><span className="clock" aria-label="Elapsed time">{time(room?.start ? (room.ended ?? now) - room.start : 0)}</span><small>{finished ? 'FINAL TIME' : playing ? 'RACE CLOCK' : 'READY WHEN YOU ARE'}</small></div><div className="player-label opponent-label"><b>{room?.opponent ? 'Opponent' : 'Opponent'}<span className="player-dot rival"/></b><small>{room?.opponent?.name ?? 'Finding a rival…'}</small></div></div>
+    <div className={`arena ${desktop && puzzle ? 'desktop-race' : ''}`}><section className="play-panel" aria-label="Crossword duel">
+      {(!desktop || !puzzle) && scorePanel}
       {room?.mode === 'robot' && room.status === 'waiting' ? <div className="waiting-surface robot-setup"><div className="robot-setup-content">
         <Bot size={38} aria-hidden="true"/>
         <div className="eyebrow">ROBOT PRACTICE</div><h2>Choose your challenge.</h2>
@@ -258,24 +286,7 @@ export default function Home() {
           <button className="text-button" disabled={busy} onClick={() => void enter('public')}>Back to lobby</button>
           {room?.mode === 'friends' && <p className="rematch-status">{room.ready ? 'You’re ready. The next race starts when your friend presses OK.' : room.opponentReady ? 'Your friend is ready. Press OK to race again.' : 'Another round? Both players must press OK to rematch.'}</p>}
         </div>}
-        {puzzle && <><div className="puzzle-edition">{puzzle.title}<span>Original Mini Duel puzzle</span></div><div className="race-progress">
-          <div className={mobileStyles.progressItem}>
-            {mobile && <div className={mobileStyles.progressBoard} aria-hidden="true">{puzzle.blocks.map((blocked,i) => <span key={i} className={blocked ? mobileStyles.blocked : answers[i] ? mobileStyles.filled : undefined}/>)}</div>}
-            <div className={mobileStyles.progressDetail}><div className="progress-label"><b>Your grid</b><span>{filled}/{puzzle.total}</span></div><Progress value={filled / puzzle.total * 100} aria-label="Your filled squares"/></div>
-          </div>
-          <div className={`rival-progress ${mobileStyles.progressItem}`}>
-            {mobile && <div className={`${mobileStyles.progressBoard} ${mobileStyles.rivalBoard}`} aria-hidden="true">{puzzle.blocks.map((blocked,i) => <span key={i} className={blocked ? mobileStyles.blocked : room.progress[i] ? mobileStyles.filled : undefined}/>)}</div>}
-            <div className={mobileStyles.progressDetail}><div className="progress-label"><b>Their grid</b><span>{opponentFilled}/{puzzle.total}</span></div><Progress value={opponentFilled / puzzle.total * 100} aria-label="Opponent filled squares"/></div>
-          </div>
-        </div>
-        {room.rumble && <div className="rumble-panel">
-          <div className="rumble-heading"><b><Zap size={14}/> Rumble powers</b><span>Random power at 25% · 50% · 75% correct</span></div>
-          <div className="rumble-powers">{([{id:'freeze',bit:1,label:'Freeze',detail:'Rival · 3 sec',icon:Snowflake},{id:'mirror',bit:2,label:'Mirror',detail:'Rival · 10 sec',icon:FlipHorizontal},{id:'check',bit:4,label:'Check',detail:'Mark your mistakes',icon:ScanSearch}] as const).map(power => {
-            const earned = !!(room.rumble!.earned & power.bit), used = !!(room.rumble!.used & power.bit);
-            return <button key={power.id} className={`power-button ${earned && !used && playing ? 'power-ready' : ''}`} disabled={!playing || frozen || busy || !earned || used} onClick={() => void enter('power',power.id)} aria-label={`${power.label}: ${used ? 'used' : earned ? 'ready' : `random milestone reward`}`}><power.icon size={20}/><b>{power.label}</b><small>{used ? 'Used' : earned ? power.detail : `Random reward`}</small></button>;
-          })}</div>
-          <div className="rumble-status" role="status">{frozen ? `Frozen! ${Math.ceil(((room.rumble.frozenUntil)-now)/1000)}s` : mirrored ? `Mirrored! OLD → DLO · ${Math.ceil((room.rumble.mirroredUntil-now)/1000)}s` : 'One use per power. Check marks disappear when you edit a letter.'}</div>
-        </div>}
+        {puzzle && <>{!desktop && matchDetails}
         <div className="puzzle-area"><div className="grid-column"><div className="active-clue"><b>{clue?.number}{direction === 'across' ? 'A' : 'D'}</b><span>{clue?.text}</span><button aria-label="Switch direction" onClick={() => key('Enter')}>{direction === 'across' ? <ArrowRight size={20}/> : <ArrowDown size={20}/>}</button></div>
           <div className="board-wrap">
     {!mobile && <MilestonePopups roomId={room?.id ?? ''} active={playing} total={puzzle?.total ?? 0} yours={filled} theirs={opponentFilled}/>}
@@ -291,6 +302,7 @@ export default function Home() {
         </div><div className="clue-lists">{(['across','down'] as const).map(dir=><section key={dir}><h3>{dir}</h3>{puzzle[dir].map(c=><button className={direction === dir && clue?.number === c.number ? 'clue-active' : ''} key={c.number} onClick={()=>chooseClue(c, dir)}><b>{c.number}</b><span>{c.text}</span></button>)}</section>)}</div></div></>}
       </>}
     </section><aside className="sidebar">
+      {desktop && puzzle && <section className="match-details" aria-label="Race details">{scorePanel}{matchDetails}</section>}
       {puzzle && room?.opponent ? <section className="side-section opponent-section"><div className="eyebrow">ACROSS THE TABLE</div><h2>{room.opponent.name}</h2><div className="opponent-grid" aria-label={`${opponentFilled} of ${puzzle.total} opponent squares filled`}>{puzzle.blocks.map((block,i)=><span key={i} className={block?'block':room.progress[i]?'filled':''}/>)}</div><p className="muted">{opponentFilled} of {puzzle.total} squares filled.<br/>Their letters stay secret.</p></section> : <section className="side-section"><div className="eyebrow">HOW TO DUEL</div><h2>A little puzzle.<br/>A proper showdown.</h2><ol className="rules"><li><b>Meet your match</b><p>{room?.mode === 'friends' ? 'Share your private link with a friend.' : room?.mode === 'robot' ? 'Choose a difficulty and start your race.' : 'We pair you with the next player.'}</p></li><li><b>Race the same grid</b><p>Watch their progress as you solve.</p></li><li><b>Finish first</b><p>Every letter must be right to win.</p></li></ol></section>}
       {room?.mode === 'friends' && <section className="side-section leaderboard"><div className="eyebrow">THE LEADERBOARD</div><h2>Fast minds. Bragging rights.</h2>{game?.leaderboard.length ? <Table><TableHeader><TableRow><TableHead>Player</TableHead><TableHead>Wins</TableHead><TableHead>Best</TableHead></TableRow></TableHeader><TableBody>{game.leaderboard.map((p,i)=><TableRow key={i}><TableCell><span className="rank">{i+1}</span>{p.name}</TableCell><TableCell>{p.wins}</TableCell><TableCell>{p.best === null ? '—' : time(p.best)}</TableCell></TableRow>)}</TableBody></Table> : <p className="muted">{game ? 'The first duel starts the rankings. It could be yours.' : 'Rankings load when you connect.'}</p>}<p className="leaderboard-note">Ranked by wins in this friend room, then fastest solve.</p></section>}
     </aside></div>

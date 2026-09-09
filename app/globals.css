@@ -96,3 +96,32 @@ main{padding-bottom:36px}.mode-switch>span{flex-basis:100%;margin:4px 0 0}.mode-
 @keyframes mirror-sheen{from{background-position:150% 0}to{background-position:-100% 0}}
 @media(max-width:700px){.icicle-edge{height:70px;overflow:hidden}.icicle-edge span{max-height:65px}.frost-screen{box-shadow:inset 0 0 35px 8px #a5e5ff88}}
 @media(prefers-reduced-motion:reduce){.crossword,.crossword>.square,.debuff-screen,.icicle-edge span{transition:none}.mirror-screen.effect-active:after{animation:none;background-position:50% 0}}
+
+@media(min-width:1000px){
+  .desktop-race{grid-template-columns:minmax(0,1fr) 310px;gap:28px;align-items:start}
+  .desktop-race .sidebar{display:flex;flex-direction:column;gap:18px;min-width:0}
+  .match-details{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .match-details .score-strip{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:20px}
+  .match-details .timer-block{grid-column:1/-1;grid-row:1;padding-bottom:16px;border-bottom:1px solid var(--border)}
+  .match-details .clock{font-size:36px;line-height:1.15}
+  .match-details .timer-block small{font-size:10px;letter-spacing:1.5px;margin-top:8px}
+  .match-details .player-label{max-width:none}
+  .match-details .player-label small{font-size:13px;line-height:1.4}
+  .match-details .puzzle-edition{display:flex;flex-direction:column;gap:5px;padding:20px 20px 0;line-height:1.4}
+  .match-details .race-progress{grid-template-columns:1fr;gap:18px;padding:20px}
+  .match-details .progress-label{font-size:13px}
+  .match-details .rumble-panel{padding:20px;border-bottom:0}
+  .match-details .rumble-heading{flex-direction:column;align-items:flex-start;gap:7px;font-size:14px}
+  .match-details .rumble-heading span{line-height:1.5}
+  .match-details .rumble-powers{grid-template-columns:1fr;gap:9px;margin-top:16px}
+  .match-details .power-button{display:grid;grid-template-columns:24px 1fr;column-gap:12px;row-gap:3px;text-align:left;padding:12px 14px;min-height:64px;justify-items:start}
+  .match-details .power-button>svg{grid-row:1/3}
+  .match-details .power-button b{font-size:13px}
+  .match-details .power-button small{font-size:11px}
+  .match-details .rumble-status{padding-top:14px;font-size:12px;line-height:1.6}
+  .desktop-race .opponent-section{display:grid;grid-template-columns:76px minmax(0,1fr);gap:6px 16px;border:1px solid var(--border);padding:18px}
+  .desktop-race .opponent-section .eyebrow{grid-column:2;font-size:10px;letter-spacing:1px}
+  .desktop-race .opponent-section h2{grid-column:2;font-size:20px;margin:0}
+  .desktop-race .opponent-grid{grid-column:1;grid-row:1/4;width:76px;height:76px;gap:2px;margin:0}
+  .desktop-race .opponent-section p{grid-column:2;font-size:11px;line-height:1.5;margin:0}
+}
