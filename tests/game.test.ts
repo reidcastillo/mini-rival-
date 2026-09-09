@@ -241,3 +241,71 @@ test('robot progresses on server time, supports both difficulties, waits for sel
     assert.equal(stable.room.won,true);
   } finally {await db.end();}
 });
+
+test('Rumble isolates queues and enforces earned, single-use powers and frozen submissions', {skip:!base}, async () => {
+  assert.ok(/^http:\/\/(localhost|127\.0\.0\.1):/.test(base!));
+  const url = new URL(process.env.DATABASE_URL!);
+  assert.ok(['localhost','127.0.0.1'].includes(url.hostname));
+  const {Pool} = await import('pg');
+  const db = new Pool({connectionString:url.toString(),max:1});
+  const a = crypto.randomUUID()+crypto.randomUUID(), b = crypto.randomUUID()+crypto.randomUUID();
+  async function call(token:string,body:object,status=200) {
+    const response = await fetch(`${base}/api/game`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+    assert.equal(response.status,status,await response.clone().text());return response.json() as Promise<any>;
+  }
+  try {
+    const waiting = await call(a,{action:'rumble'});
+    assert.equal(waiting.room.ruleset,'rumble');assert.equal(waiting.room.status,'waiting');
+    const classic = await call(crypto.randomUUID()+crypto.randomUUID(),{action:'classic'});
+    assert.notEqual(classic.room.id,waiting.room.id);
+    const match = await call(b,{action:'rumble'});
+    assert.equal(match.room.id,waiting.room.id);
+    await call(a,{action:'power',roomId:match.room.id,power:'freeze'},409);
+    const row = (await db.query('SELECT * FROM rooms WHERE id=$1',[match.room.id])).rows[0];
+    await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-1000,row.id]);
+    await db.query('UPDATE rooms SET powers1=$1 WHERE id=$2',[JSON.stringify({order:['freeze','mirror','check']}),row.id]);
+    const solution = puzzleDetails(row.puzzle).solution;
+    const cells = solution.map((c,i)=>c==='#'?-1:i).filter(i=>i>=0);
+    let answers = Array(25).fill('');
+    cells.forEach(i=>answers[i]=solution[i]==='Z'?'X':'Z');
+    const wrong = await call(a,{action:'sync',roomId:row.id,answers,revision:1});
+    assert.equal(wrong.room.rumble.earned,0);
+    await call(a,{action:'power',roomId:row.id,power:'freeze'},409);
+    answers = Array(25).fill('');cells.slice(0,Math.ceil(cells.length*.25)).forEach(i=>answers[i]=solution[i]);
+    const quarter = await call(a,{action:'sync',roomId:row.id,answers,revision:2});
+    assert.equal(quarter.room.rumble.earned,1);
+    await Promise.all([call(a,{action:'power',roomId:row.id,power:'freeze'}),call(a,{action:'power',roomId:row.id,power:'freeze'})]);
+    const frozen = await call(b,{action:'sync'});assert.ok(frozen.room.rumble.frozenUntil>Date.now());
+    const deadline = frozen.room.rumble.frozenUntil;
+    await call(a,{action:'power',roomId:row.id,power:'freeze'});
+    const stillFrozen = await call(b,{action:'sync',roomId:row.id,answers:solution.map(c=>c==='#'?'':c),revision:1});
+    assert.equal(stillFrozen.room.rumble.frozenUntil,deadline);assert.equal(stillFrozen.room.revision,0);assert.equal(stillFrozen.room.status,'playing');
+    assert.deepEqual(stillFrozen.room.answers,Array(25).fill(''));
+    const enemyPowers = {...stillFrozen.room.rumble,frozenUntil:Date.now()-1};
+    await db.query('UPDATE rooms SET powers2=$1 WHERE id=$2',[JSON.stringify(enemyPowers),row.id]);
+    cells.slice(0,Math.ceil(cells.length*.5)).forEach(i=>answers[i]=solution[i]);
+    const half = await call(a,{action:'sync',roomId:row.id,answers,revision:3});assert.equal(half.room.rumble.earned,3);
+    await call(a,{action:'power',roomId:row.id,power:'mirror'});
+    const mirrored = await call(b,{action:'sync'});assert.ok(mirrored.room.rumble.mirroredUntil>Date.now()+8000);
+    cells.slice(0,Math.ceil(cells.length*.75)).forEach(i=>answers[i]=solution[i]);
+    const last = cells[cells.length-1];answers[last]=solution[last]==='Z'?'X':'Z';
+    const threeQuarters = await call(a,{action:'sync',roomId:row.id,answers,revision:4});assert.equal(threeQuarters.room.rumble.earned,7);
+    const checked = await call(a,{action:'power',roomId:row.id,power:'check'});assert.equal(checked.room.rumble.checked[last],answers[last]);
+    assert.equal(checked.room.rumble.checked.filter(Boolean).length,1);assert.equal(checked.room.rumble.used,7);
+    const opponent = await call(b,{action:'sync'});assert.deepEqual(opponent.room.rumble.checked,[]);
+    await call(a,{action:'sync',roomId:row.id,answers:Array(25).fill(''),revision:5});
+    const retained = await call(a,{action:'sync'});assert.equal(retained.room.rumble.earned,7);assert.equal(retained.room.rumble.used,7);
+    const finished = await call(b,{action:'sync',roomId:row.id,answers:solution.map(c=>c==='#'?'':c),revision:1});assert.equal(finished.room.won,true);
+    await call(a,{action:'power',roomId:row.id,power:'check'},409);
+    const replay = await call(a,{action:'replay',roomId:row.id});assert.equal(replay.room.ruleset,'rumble');assert.equal(replay.room.rumble.used,0);
+    const privateRoom = await call(a,{action:'friends'});assert.equal(privateRoom.room.ruleset,'rumble');
+    const privateMatch = await call(b,{action:'join',invite:privateRoom.room.invite});assert.equal(privateMatch.room.id,privateRoom.room.id);assert.equal(privateMatch.room.ruleset,'rumble');
+    const privateRow = (await db.query('SELECT * FROM rooms WHERE id=$1',[privateMatch.room.id])).rows[0];
+    await db.query('UPDATE rooms SET start=$1 WHERE id=$2',[Date.now()-1000,privateRow.id]);
+    await call(a,{action:'sync',roomId:privateRow.id,answers:puzzleDetails(privateRow.puzzle).solution.map(c=>c==='#'?'':c),revision:1});
+    await call(a,{action:'replay',roomId:privateRow.id});
+    const privateReplay = await call(b,{action:'replay',roomId:privateRow.id});
+    assert.equal(privateReplay.room.ruleset,'rumble');assert.notEqual(privateReplay.room.id,privateRow.id);assert.equal(privateReplay.room.rumble.earned,0);
+
+  } finally {await db.end();}
+});

@@ -77,3 +77,22 @@ main{padding-bottom:36px}.mode-switch>span{flex-basis:100%;margin:4px 0 0}.mode-
 
 
 @media(max-width:700px){.keyboard{display:block;margin:12px auto 0;max-width:440px}.key-row button{height:46px}.crossword{grid-template-rows:repeat(5,minmax(0,1fr))}}
+
+.ruleset-picker{display:flex;flex-direction:column;gap:8px}.ruleset-picker button{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--surface);color:var(--foreground)}.ruleset-picker button[aria-pressed=true]{border-color:var(--primary);color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}.ruleset-picker button:disabled{cursor:default}
+.rumble-panel{padding:14px 22px;border-bottom:1px solid var(--border);background:var(--surface)}.rumble-heading{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:12px}.rumble-heading b{display:flex;align-items:center;gap:5px}.rumble-heading span{font-size:11px;color:var(--muted-foreground)}.rumble-powers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.power-button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:80px;padding:9px 4px;border:1px solid var(--border);border-radius:10px;color:var(--foreground);background:var(--surface)}.power-button b{font-size:12px}.power-button small{font-size:10px;line-height:1.4}.power-button:disabled{opacity:.5}.power-button.power-ready{border-color:var(--primary);color:var(--primary);box-shadow:0 0 12px color-mix(in srgb,var(--primary) 35%,transparent);animation:power-glow 1.5s ease-in-out infinite alternate}.rumble-status{font-size:12px;line-height:1.4;min-height:30px;padding-top:9px;color:var(--muted-foreground)}.crossword{transition:transform .65s ease-in-out,box-shadow .4s}.crossword>.square{transition:transform .65s ease-in-out}.board-mirrored{transform:perspective(1200px) rotateY(180deg);box-shadow:0 0 24px #c7e7ff99}.board-mirrored>.square{transform:rotateY(180deg)}.board-frozen{outline:4px solid #81d6f4;outline-offset:0;filter:saturate(.5)}.square.letter-incorrect:after{content:'';position:absolute;width:70%;height:2px;background:#d32f2f;transform:rotate(-45deg);pointer-events:none}
+@keyframes power-glow{to{box-shadow:0 0 18px color-mix(in srgb,var(--primary) 55%,transparent)}}
+@media(max-width:700px){.rumble-panel{padding:10px}.rumble-heading{align-items:flex-start}.rumble-heading span{max-width:150px;text-align:right}.rumble-powers{gap:8px}.ruleset-picker{flex-shrink:0}.ruleset-picker .mode-pill{font-size:10px;padding:9px}.rumble-status{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.power-button.power-ready{animation:none}}
+
+.debuff-screen{position:fixed;inset:0;z-index:50;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .35s ease,visibility .35s}
+.debuff-screen.effect-active{opacity:1;visibility:visible}
+.frost-screen{background:linear-gradient(180deg,#d6f5ff55,#8cddff22 40%,#b4edff44);box-shadow:inset 0 0 70px 18px #a5e5ff99}
+.icicle-edge{position:absolute;top:0;left:0;right:0;display:flex;align-items:flex-start;filter:drop-shadow(0 3px 3px #68b5db66)}
+.icicle-edge span{flex:1;background:linear-gradient(105deg,#effcff 15%,#b3e7fb 48%,#ffffffdd 52%,#8ecbea 85%);clip-path:polygon(0 0,100% 0,78% 35%,45% 100%,15% 38%);transform-origin:top;transition:transform .35s ease;transform:scaleY(0)}
+.effect-active .icicle-edge span{transform:scaleY(1)}
+.mirror-screen{background:linear-gradient(125deg,#cde4ff18,transparent 40%,#ffffff24 60%,#d9cbff22);box-shadow:inset 0 0 45px #d8eaff80}
+.mirror-screen:after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,#ffffff08 42%,#ffffff60 49%,#ffffff12 56%,transparent 68%);background-size:250% 100%;background-position:150% 0}
+.mirror-screen.effect-active:after{animation:mirror-sheen 3s ease-in-out infinite}
+@keyframes mirror-sheen{from{background-position:150% 0}to{background-position:-100% 0}}
+@media(max-width:700px){.icicle-edge{height:70px;overflow:hidden}.icicle-edge span{max-height:65px}.frost-screen{box-shadow:inset 0 0 35px 8px #a5e5ff88}}
+@media(prefers-reduced-motion:reduce){.crossword,.crossword>.square,.debuff-screen,.icicle-edge span{transition:none}.mirror-screen.effect-active:after{animation:none;background-position:50% 0}}

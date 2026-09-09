@@ -26,3 +26,7 @@ Existing puzzle order is preserved because saved matches reference puzzle indice
 The generator uses several layouts, checks every crossing, and prevents repeated answers within a grid. `data/clue-variants.json` contains alternate clues. Extend the dictionary and regenerate to add variety. Commit generated data and redeploy to publish it.
 
 Robot practice starts with a difficulty selection: Novice takes 45–60 seconds and Intermediate takes 30–45 seconds. Each rematch returns to setup. Apply new database migrations with `npm run db:migrate` before deploying changes to database fields.
+
+## Rumble
+
+Choose 1 V 1 Rumble for public or private friend races with powers. Correct-letter milestones at 25%, 50%, and 75% unlock the three powers in a random order for each player: Freeze (three seconds with a blue frost overlay and icicles), Mirror (ten seconds of reversed entry with an animated board flip and a shiny screen), and Check (slashes on your current incorrect letters). Each power can be activated once per race. Classic and Rumble queues are separate; robot practice uses Classic. Rematches preserve the rules and reset powers. Apply the new migration before deploying.

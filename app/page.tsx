@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import mobileStyles from './mobile-game.module.css';
+import type { Power, PowerState } from '@/lib/rumble';
 import { MilestonePopups } from '@/components/milestone-popups';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowRight, ArrowDown, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot, Compass } from 'lucide-react';
+import { ArrowRight, ArrowDown, Delete, Trophy, RotateCcw, WifiOff, Palette, Sun, Moon, Trees, Rocket, Users, Globe, Copy, Check, Bot, Compass, Snowflake, FlipHorizontal, ScanSearch, Zap } from 'lucide-react';
 
 type Clue = { number: number; text: string; cells: number[] };
 type Puzzle = { title: string; blocks: boolean[]; numbers: Record<number, number>; across: Clue[]; down: Clue[]; total: number };
-type Game = { now: number; player: { name: string }; room: { id: string; mode: 'public' | 'friends' | 'robot'; robotDifficulty: 'novice' | 'intermediate' | null; invite: string | null; ready: boolean; opponentReady: boolean; status: string; start: number | null; ended: number | null; won: boolean; solved: boolean; opponent: { name: string; connected: boolean } | null; progress: boolean[]; answers: string[]; revision: number; puzzle: Puzzle | null }; incorrect: boolean; leaderboard: { name: string; wins: number; best: number | null }[] };
+type Game = { now: number; player: { name: string }; room: { id: string; ruleset: 'classic' | 'rumble'; rumble: PowerState | null; mode: 'public' | 'friends' | 'robot'; robotDifficulty: 'novice' | 'intermediate' | null; invite: string | null; ready: boolean; opponentReady: boolean; status: string; start: number | null; ended: number | null; won: boolean; solved: boolean; opponent: { name: string; connected: boolean } | null; progress: boolean[]; answers: string[]; revision: number; puzzle: Puzzle | null }; incorrect: boolean; leaderboard: { name: string; wins: number; best: number | null }[] };
 const time = (ms: number) => `${Math.floor(Math.max(0, ms) / 60000)}:${String(Math.floor(Math.max(0, ms) / 1000) % 60).padStart(2, '0')}`;
 type Theme = 'classic' | 'dark' | 'jungle' | 'space' | 'western';
 const themes = [{id:'classic', name:'Classic', icon:Sun}, {id:'dark', name:'Dark', icon:Moon}, {id:'jungle', name:'Jungle', icon:Trees}, {id:'space', name:'Space', icon:Rocket}, {id:'western', name:'Western', icon:Compass}] as const;
@@ -31,19 +32,20 @@ export default function Home() {
   const live = useRef({ token: '', room: '', revision: 0, answers: empty(), dirty: false, offset: 0, pending: false, joined: false });
   const gameRef = useRef<Game | null>(null);
   const board = useRef<HTMLDivElement>(null);
+  const wasMirrored = useRef(false);
 
-  const sync = useCallback(async (action: 'join' | 'sync' | 'replay' | 'friends' | 'public' | 'robot' | 'robot-setup' = 'sync', difficulty?: 'novice' | 'intermediate') => {
+  const sync = useCallback(async (action: 'join' | 'sync' | 'replay' | 'friends' | 'public' | 'robot' | 'robot-setup' | 'classic' | 'rumble' | 'power' = 'sync', difficulty?: 'novice' | 'intermediate', power?: Power) => {
     const state = live.current;
     if (action !== 'sync') while (state.pending) await new Promise(resolve => setTimeout(resolve, 50));
     if (state.pending || !state.token) return;
     state.pending = true;
     const revision = state.revision;
-    const shouldSend = action === 'sync' && state.dirty && ['playing', 'finished'].includes(gameRef.current?.room.status ?? '');
+    const shouldSend = (action === 'sync' || action === 'power') && state.dirty && ['playing', 'finished'].includes(gameRef.current?.room.status ?? '');
     const sent = Date.now();
     try {
       const response = await fetch('/api/game', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.token}` },
-        body: JSON.stringify({ action, ...(difficulty ? {difficulty} : {}), ...(action === 'join' && new URL(location.href).searchParams.has('friend') ? { invite: new URL(location.href).searchParams.get('friend') } : {}), ...(action === 'replay' ? {roomId: state.room} : {}), ...(shouldSend ? { roomId: state.room, answers: state.answers, revision } : {}) }),
+        body: JSON.stringify({ action, ...(power ? {power,roomId:state.room} : {}), ...(difficulty ? {difficulty} : {}), ...(action === 'join' && new URL(location.href).searchParams.has('friend') ? { invite: new URL(location.href).searchParams.get('friend') } : {}), ...(action === 'replay' ? {roomId: state.room} : {}), ...(shouldSend ? { roomId: state.room, answers: state.answers, revision } : {}) }),
         signal: AbortSignal.timeout(12000),
       });
       const result = await response.json() as Game & { error?: string };
@@ -55,6 +57,10 @@ export default function Home() {
       window.history.replaceState(null, '', url);
       setInviteUrl(data.room.invite ? url.toString() : '');
       state.offset = data.now - (sent + Date.now()) / 2;
+      if (data.room.rumble && data.room.status === 'playing' && data.room.rumble.frozenUntil > data.now) {
+        state.answers = data.room.answers; state.revision = data.room.revision; state.dirty = false;
+        setAnswers([...state.answers]);
+      }
       if (data.room.id !== state.room) {
         state.room = data.room.id;
         state.answers = data.room.answers;
@@ -110,18 +116,28 @@ export default function Home() {
   const room = game?.room;
   const puzzle = room?.puzzle;
   const playing = room?.status === 'playing' && !!puzzle && now >= (room.start ?? Infinity);
-  const canEdit = playing || (room?.status === 'finished' && !!puzzle && !room.won && !room.solved && !room.ready);
+  const frozen = playing && (room?.rumble?.frozenUntil ?? 0) > now;
+  const mirrored = playing && (room?.rumble?.mirroredUntil ?? 0) > now;
+  useEffect(() => {
+    if (mirrored && !wasMirrored.current && puzzle) {
+      const current = puzzle[direction].find(clue => clue.cells.includes(cell));
+      if (current) setCell([...current.cells].reverse().find(i => !live.current.answers[i]) ?? current.cells[current.cells.length-1]);
+    }
+    wasMirrored.current = mirrored;
+  }, [mirrored,puzzle,direction,cell]);
+  const canEdit = (playing && !frozen) || (room?.status === 'finished' && !!puzzle && !room.won && !room.solved && !room.ready);
   const finished = room?.status === 'finished';
   const cancelled = room?.status === 'cancelled';
   const countdown = room?.status === 'playing' && !puzzle;
-  const clues = puzzle?.[direction] ?? [];
+  const clues = (puzzle?.[direction] ?? []).map(clue => mirrored ? {...clue,cells:[...clue.cells].reverse()} : clue);
   const clue = clues.find(c => c.cells.includes(cell)) ?? clues[0];
   const filled = answers.filter((x, i) => x && !puzzle?.blocks[i]).length;
   const opponentFilled = room?.progress.filter(Boolean).length ?? 0;
 
   const chooseClue = useCallback((next: Clue, dir: 'across' | 'down') => {
     setDirection(dir);
-    setCell(next.cells.find(i => !live.current.answers[i]) ?? next.cells[0]);
+    const cells = gameRef.current?.room.rumble && gameRef.current.room.rumble.mirroredUntil > Date.now() + live.current.offset ? [...next.cells].sort((a,b) => b-a) : next.cells;
+    setCell(cells.find(i => !live.current.answers[i]) ?? cells[0]);
     focusGrid();
   }, [focusGrid]);
   function cycleClue(step: number) {
@@ -140,7 +156,7 @@ export default function Home() {
     if (value === 'Tab' || value === 'BackTab') { chooseClue(clues[(clues.indexOf(clue) + (value === 'Tab' ? 1 : clues.length - 1)) % clues.length], direction); return; }
     const arrows: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -5, ArrowDown: 5 };
     if (value in arrows) {
-      const delta = arrows[value], next = cell + delta;
+      const delta = arrows[value] * (mirrored && Math.abs(arrows[value]) === 1 ? -1 : 1), next = cell + delta;
       setDirection(Math.abs(delta) === 5 ? 'down' : 'across');
       if (next >= 0 && next < 25 && !puzzle.blocks[next] && (Math.abs(delta) === 5 || Math.floor(next / 5) === Math.floor(cell / 5))) setCell(next);
       return;
@@ -166,7 +182,7 @@ export default function Home() {
     current.answers = next; current.revision += 1; current.dirty = true;
     setAnswers(next);
     void sync();
-  }, [canEdit, puzzle, clue, cell, clues, direction, chooseClue, sync]);
+  }, [canEdit, mirrored, puzzle, clue, cell, clues, direction, chooseClue, sync]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -196,8 +212,8 @@ export default function Home() {
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem('mini-duel-theme', next); } catch {}
   }
-  async function enter(action: 'replay' | 'friends' | 'public' | 'robot' | 'robot-setup') {
-    setBusy(true); await sync(action, action === 'robot' ? difficulty : undefined); setBusy(false);
+  async function enter(action: 'replay' | 'friends' | 'public' | 'robot' | 'robot-setup' | 'classic' | 'rumble' | 'power', power?: Power) {
+    setBusy(true); await sync(action, action === 'robot' ? difficulty : undefined, power); setBusy(false);
   }
   async function copyLink() {
     try { await navigator.clipboard.writeText(inviteUrl); setCopied(true); setTimeout(() => setCopied(false), 2500); }
@@ -205,6 +221,8 @@ export default function Home() {
   }
 
   return <main className={playing || finished ? 'live-race' : undefined}>
+    <div className={`debuff-screen frost-screen ${frozen ? 'effect-active' : ''}`} aria-hidden="true"><div className="icicle-edge">{Array.from({length:24},(_,i) => <span key={i} style={{height:`${35 + (i * 37 % 65)}px`}}/>)}</div></div>
+    <div className={`debuff-screen mirror-screen ${mirrored ? 'effect-active' : ''}`} aria-hidden="true"/>
 
     <div className="theme-scenery" aria-hidden="true">
       <div className="space-sky"/>
@@ -212,8 +230,8 @@ export default function Home() {
       <div className="western-scenery"/>
     </div>
     <header className="masthead"><a className="brand" href="/">Mini Duel<img className="brand-icon" src="/crossword-icon.svg" width="40" height="40" alt="" aria-hidden="true"/></a><span className="edition">THE HEAD-TO-HEAD CROSSWORD</span><details className="theme-picker"><summary><Palette size={17}/> Themes</summary><div className="theme-options" role="group" aria-label="Site theme">{themes.map(t => <button key={t.id} aria-pressed={theme === t.id} onClick={event => { changeTheme(t.id); event.currentTarget.closest('details')?.removeAttribute('open'); }}><t.icon size={18}/>{t.name}{theme === t.id && <Check size={15}/>}</button>)}</div></details></header>
-    <section className="title-row"><div><div className="eyebrow">COMPETITION HAS NEVER MEANT SO MUCH.</div><h1>The Mini, with a rival.</h1></div><span className="mode-pill">1 VS 1 · CLASSIC</span></section>
-    <nav className="mode-switch" aria-label="Match mode"><button aria-pressed={!room || room.mode === 'public'} disabled={busy || playing || countdown} onClick={() => void enter('public')}><Globe size={16}/> Public match</button><button aria-pressed={room?.mode === 'friends'} disabled={busy || playing || countdown} onClick={() => void enter('friends')}><Users size={16}/> Play with a friend</button><button aria-pressed={room?.mode === 'robot'} disabled={busy || playing || countdown} onClick={() => void enter('robot-setup')}><Bot size={16}/> Robot</button><span>{room?.mode === 'friends' ? 'Private room · just the two of you' : room?.mode === 'robot' ? 'Play against a bloodthirsty terminator' : 'Match with the next player online'}</span></nav>
+    <section className="title-row"><div><div className="eyebrow">COMPETITION HAS NEVER MEANT SO MUCH.</div><h1>The Mini, with a rival.</h1></div><div className="ruleset-picker" aria-label="Race rules"><button className="mode-pill" aria-pressed={room?.ruleset !== 'rumble'} disabled={busy || playing || countdown} onClick={() => void enter('classic')}>1 V 1 CLASSIC</button><button className="mode-pill" aria-pressed={room?.ruleset === 'rumble'} disabled={busy || playing || countdown} onClick={() => void enter('rumble')}><Zap size={14}/>1 V 1 RUMBLE</button></div></section>
+    <nav className="mode-switch" aria-label="Match mode"><button aria-pressed={!room || room.mode === 'public'} disabled={busy || playing || countdown} onClick={() => void enter('public')}><Globe size={16}/> Public match</button><button aria-pressed={room?.mode === 'friends'} disabled={busy || playing || countdown} onClick={() => void enter('friends')}><Users size={16}/> Play with a friend</button><button aria-pressed={room?.mode === 'robot'} title={room?.ruleset === 'rumble' ? 'Robot practice is available in Classic' : undefined} disabled={busy || playing || countdown || room?.ruleset === 'rumble'} onClick={() => void enter('robot-setup')}><Bot size={16}/> Robot</button><span>{room?.mode === 'friends' ? 'Private room · just the two of you' : room?.mode === 'robot' ? 'Play against a bloodthirsty terminator' : room?.ruleset === 'rumble' ? 'Rumble · earn powers at 25%, 50% and 75% correct' : 'Match with the next player online'}</span></nav>
     {error && <div className="connection-error" role="alert"><WifiOff size={17}/><span>{error}</span></div>}
     <div className="arena"><section className="play-panel" aria-label="Crossword duel">
       <div className="score-strip"><div className="player-label"><b><span className="player-dot"/>You</b><small>{game?.player.name ?? 'Joining the arena…'}</small></div><div className="timer-block"><span className="clock" aria-label="Elapsed time">{time(room?.start ? (room.ended ?? now) - room.start : 0)}</span><small>{finished ? 'FINAL TIME' : playing ? 'RACE CLOCK' : 'READY WHEN YOU ARE'}</small></div><div className="player-label opponent-label"><b>{room?.opponent ? 'Opponent' : 'Opponent'}<span className="player-dot rival"/></b><small>{room?.opponent?.name ?? 'Finding a rival…'}</small></div></div>
@@ -250,11 +268,19 @@ export default function Home() {
             <div className={mobileStyles.progressDetail}><div className="progress-label"><b>Their grid</b><span>{opponentFilled}/{puzzle.total}</span></div><Progress value={opponentFilled / puzzle.total * 100} aria-label="Opponent filled squares"/></div>
           </div>
         </div>
+        {room.rumble && <div className="rumble-panel">
+          <div className="rumble-heading"><b><Zap size={14}/> Rumble powers</b><span>Random power at 25% · 50% · 75% correct</span></div>
+          <div className="rumble-powers">{([{id:'freeze',bit:1,label:'Freeze',detail:'Rival · 3 sec',icon:Snowflake},{id:'mirror',bit:2,label:'Mirror',detail:'Rival · 10 sec',icon:FlipHorizontal},{id:'check',bit:4,label:'Check',detail:'Mark your mistakes',icon:ScanSearch}] as const).map(power => {
+            const earned = !!(room.rumble!.earned & power.bit), used = !!(room.rumble!.used & power.bit);
+            return <button key={power.id} className={`power-button ${earned && !used && playing ? 'power-ready' : ''}`} disabled={!playing || frozen || busy || !earned || used} onClick={() => void enter('power',power.id)} aria-label={`${power.label}: ${used ? 'used' : earned ? 'ready' : `random milestone reward`}`}><power.icon size={20}/><b>{power.label}</b><small>{used ? 'Used' : earned ? power.detail : `Random reward`}</small></button>;
+          })}</div>
+          <div className="rumble-status" role="status">{frozen ? `Frozen! ${Math.ceil(((room.rumble.frozenUntil)-now)/1000)}s` : mirrored ? `Mirrored! Enter words backwards · ${Math.ceil((room.rumble.mirroredUntil-now)/1000)}s` : 'One use per power. Check marks disappear when you edit a letter.'}</div>
+        </div>}
         <div className="puzzle-area"><div className="grid-column"><div className="active-clue"><b>{clue?.number}{direction === 'across' ? 'A' : 'D'}</b><span>{clue?.text}</span><button aria-label="Switch direction" onClick={() => setDirection(d => d === 'across' ? 'down' : 'across')}>{direction === 'across' ? <ArrowRight size={20}/> : <ArrowDown size={20}/>}</button></div>
           <div className="board-wrap">
     {!mobile && <MilestonePopups roomId={room?.id ?? ''} active={playing} total={puzzle?.total ?? 0} yours={filled} theirs={opponentFilled}/>}
-          <div ref={board} className="crossword" role="group" aria-label="Crossword grid. Type letters, use arrows to move, Enter to switch direction, and Tab to change clues." tabIndex={0}>
-            {puzzle.blocks.map((blocked, i) => blocked ? <div className="square block" key={i}/> : <button key={i} tabIndex={-1} disabled={!canEdit} aria-label={`Row ${Math.floor(i / 5) + 1}, column ${i % 5 + 1}${puzzle.numbers[i] ? `, clue ${puzzle.numbers[i]}` : ''}, ${answers[i] || 'empty'}`} aria-pressed={cell === i} className={`square ${clue?.cells.includes(i) ? 'word-selected' : ''} ${cell === i ? 'selected' : ''}`} onClick={() => { if (cell === i) setDirection(d => d === 'across' ? 'down' : 'across'); setCell(i); focusGrid(); }}><small>{puzzle.numbers[i]}</small><span>{answers[i]}</span></button>)}
+          <div ref={board} className={`crossword ${mirrored ? 'board-mirrored' : ''} ${frozen ? 'board-frozen' : ''}`} role="group" aria-label="Crossword grid. Type letters, use arrows to move, Enter to switch direction, and Tab to change clues." tabIndex={0}>
+            {puzzle.blocks.map((blocked, i) => blocked ? <div className="square block" key={i}/> : <button key={i} tabIndex={-1} disabled={!canEdit} aria-label={`Row ${Math.floor(i / 5) + 1}, column ${i % 5 + 1}${puzzle.numbers[i] ? `, clue ${puzzle.numbers[i]}` : ''}, ${answers[i] || 'empty'}`} aria-pressed={cell === i} className={`square ${clue?.cells.includes(i) ? 'word-selected' : ''} ${cell === i ? 'selected' : ''} ${answers[i] && room?.rumble?.checked[i] === answers[i] ? 'letter-incorrect' : ''}`} onClick={() => { if (cell === i) setDirection(d => d === 'across' ? 'down' : 'across'); setCell(i); focusGrid(); }}><small>{puzzle.numbers[i]}</small><span>{answers[i]}</span></button>)}
           </div>
           </div>
           {mobile && <div className={mobileStyles.clueBar} aria-label="Clue navigation">
